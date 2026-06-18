@@ -148,7 +148,7 @@ async function onCheckoutComplete(session: Stripe.Checkout.Session, db: Pool) {
   }
 }
 
-async function onPaymentFailed(invoice: Stripe.Invoice, db: Pool) {
+async function onPaymentFailed(invoice: Stripe.Invoice, db: Pool, deprovisionFn: DeprovisionFn) {
   const customerId = typeof invoice.customer === 'string'
     ? invoice.customer
     : (invoice.customer as Stripe.Customer | null)?.id;
@@ -159,19 +159,41 @@ async function onPaymentFailed(invoice: Stripe.Invoice, db: Pool) {
     [customerId]
   );
   if (!rows.length) return;
+  const clientId     = rows[0].id;
+  const attemptCount = (invoice as any).attempt_count ?? 1;
 
   await db.query(
     `UPDATE clients SET billing_status = 'past_due', updated_at = NOW() WHERE id = $1`,
-    [rows[0].id]
+    [clientId]
   );
   await db.query(
     `INSERT INTO events (client_id, type, payload) VALUES ($1, 'payment_failed', $2)`,
-    [rows[0].id, JSON.stringify({
-      event:        'invoice.payment_failed',
-      invoiceId:    invoice.id,
-      attemptCount: (invoice as any).attempt_count ?? null,
+    [clientId, JSON.stringify({
+      event: 'invoice.payment_failed',
+      invoiceId: invoice.id,
+      attemptCount,
     })]
   );
+
+  // 2nd failed attempt → cancel subscription immediately; subscription.deleted webhook
+  // will handle DB churn + deprovision.
+  if (attemptCount >= 2) {
+    const subscriptionId = typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : (invoice.subscription as Stripe.Subscription | null)?.id;
+
+    if (subscriptionId) {
+      try {
+        await stripe.subscriptions.cancel(subscriptionId);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await db.query(
+          `INSERT INTO events (client_id, type, payload) VALUES ($1, 'other', $2)`,
+          [clientId, JSON.stringify({ event: 'auto_cancel_failed', error: msg, attemptCount })]
+        );
+      }
+    }
+  }
 }
 
 async function onSubscriptionCanceled(
@@ -246,7 +268,7 @@ export async function handleStripeWebhook(
       await onCheckoutComplete(event.data.object as Stripe.Checkout.Session, db);
       break;
     case 'invoice.payment_failed':
-      await onPaymentFailed(event.data.object as Stripe.Invoice, db);
+      await onPaymentFailed(event.data.object as Stripe.Invoice, db, deprovisionFn);
       break;
     case 'customer.subscription.deleted':
       await onSubscriptionCanceled(event.data.object as Stripe.Subscription, db, deprovisionFn);

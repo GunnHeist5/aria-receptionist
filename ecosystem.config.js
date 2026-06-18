@@ -26,7 +26,7 @@ module.exports = {
       restart_delay: 5000,
       env: {
         NODE_ENV: 'production',
-        VOICE_PROVIDER: 'mock',
+        VOICE_PROVIDER: 'trillet',
       },
     },
   ],
