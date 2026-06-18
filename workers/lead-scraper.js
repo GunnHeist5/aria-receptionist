@@ -35,6 +35,8 @@ const LOCATION = getArg('--location') ?? 'Philadelphia, PA';
 const RADIUS   = parseInt(getArg('--radius') ?? '25000', 10);
 const MAX      = parseInt(getArg('--max') ?? '40', 10);
 const QUERY    = getArg('--query') ?? 'plumber plumbing';
+const LAT      = getArg('--lat')  ? parseFloat(getArg('--lat'))  : null;
+const LNG      = getArg('--lng')  ? parseFloat(getArg('--lng'))  : null;
 
 const API_KEY  = process.env.GOOGLE_PLACES_API_KEY;
 if (!API_KEY) {
@@ -61,10 +63,15 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Google Places API ─────────────────────────────────────────────────────────
 
-// Embeds location in the query — no Geocoding API needed (Places API only).
-async function textSearch(query, location, pageToken) {
-  const q = `${query} in ${location}`;
-  let url  = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(q)}&key=${API_KEY}`;
+// If lat/lng provided, uses coordinate + radius for precision.
+// Otherwise embeds location name in query (less precise, no Geocoding API needed).
+async function textSearch(query, pageToken) {
+  let url;
+  if (LAT !== null && LNG !== null) {
+    url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${LAT},${LNG}&radius=${RADIUS}&key=${API_KEY}`;
+  } else {
+    url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(`${query} in ${LOCATION}`)}&key=${API_KEY}`;
+  }
   if (pageToken) url += `&pagetoken=${encodeURIComponent(pageToken)}`;
   return get(url);
 }
@@ -90,8 +97,7 @@ function parseAddress(components = []) {
 
 async function main() {
   console.log(`\nARIA Lead Scraper`);
-  console.log(`Location : ${LOCATION}`);
-  console.log(`Radius   : ${RADIUS}m`);
+  console.log(`Location : ${LAT !== null ? `${LAT}, ${LNG} (±${RADIUS}m)` : `"${LOCATION}" (text search — use --lat/--lng for precision)`}`);
   console.log(`Query    : ${QUERY}`);
   console.log(`Max leads: ${MAX}\n`);
 
@@ -105,7 +111,7 @@ async function main() {
     page++;
     console.log(`Fetching page ${page}...`);
 
-    const res = await textSearch(QUERY, LOCATION, pageToken);
+    const res = await textSearch(QUERY, pageToken);
 
     if (res.status !== 'OK' && res.status !== 'ZERO_RESULTS') {
       throw new Error(`Places API error: ${res.status} — ${res.error_message ?? ''}`);
