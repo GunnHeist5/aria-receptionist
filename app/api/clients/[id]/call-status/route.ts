@@ -7,7 +7,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const { status } = await req.json();
+  const { status, contractorId } = await req.json();
   if (!VALID.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
@@ -16,10 +16,11 @@ export async function PATCH(
   await pool.query(
     `UPDATE clients
      SET call_status    = $2,
+         claimed_by     = COALESCE($3, claimed_by),
          last_called_at = NOW(),
          updated_at     = NOW()
      WHERE id = $1`,
-    [params.id, status]
+    [params.id, status, contractorId ?? null]
   );
 
   // Promote to 'won' when a contractor marks as interested

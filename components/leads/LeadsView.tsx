@@ -11,6 +11,7 @@ type Lead = {
   website: string | null;
   call_status: string | null;
   last_called_at: string | null;
+  claimed_by: string | null;
 };
 
 type Filter = 'new' | 'callback' | 'interested' | 'all';
@@ -35,7 +36,11 @@ function formatPhone(raw: string) {
   return raw;
 }
 
-function LeadCard({ lead, onStatus }: { lead: Lead; onStatus: (id: string, s: string) => void }) {
+function LeadCard({ lead, contractorId, onStatus }: {
+  lead: Lead;
+  contractorId: string | null;
+  onStatus: (id: string, s: string) => void;
+}) {
   const [loading, setLoading] = useState(false);
   const status = lead.call_status ?? 'new';
 
@@ -44,7 +49,7 @@ function LeadCard({ lead, onStatus }: { lead: Lead; onStatus: (id: string, s: st
     await fetch(`/api/clients/${lead.id}/call-status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: s }),
+      body: JSON.stringify({ status: s, contractorId }),
     });
     onStatus(lead.id, s);
     setLoading(false);
@@ -103,7 +108,7 @@ function LeadCard({ lead, onStatus }: { lead: Lead; onStatus: (id: string, s: st
   );
 }
 
-export default function LeadsView({ leads: initial }: { leads: Lead[] }) {
+export default function LeadsView({ leads: initial, contractorId }: { leads: Lead[]; contractorId: string | null }) {
   const [leads, setLeads] = useState(initial);
   const [filter, setFilter] = useState<Filter>('new');
 
@@ -140,6 +145,10 @@ export default function LeadsView({ leads: initial }: { leads: Lead[] }) {
       <div className="mb-8">
         <p className="text-[#c9a84c] text-xs font-mono uppercase tracking-widest mb-1">ARIA Capital</p>
         <h1 className="text-2xl text-[#f5f2ee]">Leads Pipeline</h1>
+        {contractorId
+          ? <p className="text-xs text-[#555] mt-1">Logged in as <span className="text-[#9a9a9a]">{contractorId}</span></p>
+          : <p className="text-xs text-red-400 mt-1">No contractor ID — add ?c=yourname to your URL</p>
+        }
       </div>
 
       {/* Filter tabs */}
@@ -161,7 +170,7 @@ export default function LeadsView({ leads: initial }: { leads: Lead[] }) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {visible.map(l => (
-            <LeadCard key={l.id} lead={l} onStatus={updateStatus} />
+            <LeadCard key={l.id} lead={l} contractorId={contractorId} onStatus={updateStatus} />
           ))}
         </div>
       )}
