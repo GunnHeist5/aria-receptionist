@@ -9,10 +9,12 @@ export default async function AdminPage() {
   const [statsRes, clientsRes, eventsRes] = await Promise.all([
     pool.query(`
       SELECT
-        COUNT(*)          FILTER (WHERE status = 'live')             AS live_count,
-        COALESCE(SUM(mrr) FILTER (WHERE status = 'live'), 0)         AS total_mrr,
-        COUNT(*)          FILTER (WHERE billing_status = 'pending')  AS pending_payment,
-        COUNT(*)          FILTER (WHERE billing_status = 'past_due') AS past_due_count
+        COUNT(*)          FILTER (WHERE status = 'live')                          AS live_count,
+        COALESCE(SUM(mrr) FILTER (WHERE status = 'live'), 0)                      AS total_mrr,
+        COUNT(*)          FILTER (WHERE billing_status = 'pending')               AS pending_payment,
+        COUNT(*)          FILTER (WHERE billing_status = 'past_due')              AS past_due_count,
+        COUNT(*)          FILTER (WHERE status = 'lead')                          AS lead_count,
+        COUNT(*)          FILTER (WHERE status = 'won' OR call_status='interested') AS interested_count
       FROM clients
     `),
     pool.query(`

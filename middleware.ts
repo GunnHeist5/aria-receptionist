@@ -15,6 +15,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Leads (contractor) auth ──────────────────────────────────────────────────
+  if (pathname.startsWith('/leads')) {
+    const token = process.env.LEADS_TOKEN;
+    if (!token) return NextResponse.next();
+    if (request.cookies.get('leads_session')?.value === token) return NextResponse.next();
+    const urlToken = request.nextUrl.searchParams.get('token');
+    if (urlToken === token) {
+      const clean = new URL(request.nextUrl.href);
+      clean.searchParams.delete('token');
+      const res = NextResponse.redirect(clean);
+      res.cookies.set('leads_session', token, { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30, path: '/' });
+      return res;
+    }
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   // ── Intake token auth ────────────────────────────────────────────────────────
   if (pathname.startsWith('/intake')) {
     const token = process.env.INTAKE_TOKEN;
@@ -47,5 +63,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/intake', '/intake/:path*'],
+  matcher: ['/admin/:path*', '/leads', '/leads/:path*', '/intake', '/intake/:path*'],
 };

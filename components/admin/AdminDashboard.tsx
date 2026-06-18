@@ -28,6 +28,8 @@ type Stats = {
   total_mrr: string;
   pending_payment: string;
   past_due_count: string;
+  lead_count: string;
+  interested_count: string;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -66,6 +68,8 @@ function Badge({ status, map }: { status: string; map: Record<string, string> })
   );
 }
 
+type TableFilter = 'all' | 'leads' | 'active' | 'interested';
+
 export default function AdminDashboard({
   stats, clients, events, baseUrl,
 }: {
@@ -74,8 +78,9 @@ export default function AdminDashboard({
   events: Event[];
   baseUrl: string;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [copied, setCopied]     = useState<string | null>(null);
+  const [expanded,    setExpanded]    = useState<string | null>(null);
+  const [copied,      setCopied]      = useState<string | null>(null);
+  const [tableFilter, setTableFilter] = useState<TableFilter>('all');
 
   const eventsByClient = events.reduce<Record<string, Event[]>>((acc, e) => {
     (acc[e.client_id] ??= []).push(e);
@@ -98,6 +103,13 @@ export default function AdminDashboard({
 
   const mrr = parseFloat(stats.total_mrr || '0');
 
+  const visibleClients = clients.filter(c => {
+    if (tableFilter === 'leads')     return c.status === 'lead';
+    if (tableFilter === 'active')    return c.status === 'live' || c.status === 'won' || c.status === 'provisioning';
+    if (tableFilter === 'interested') return c.status === 'won';
+    return true;
+  });
+
   return (
     <main className="min-h-screen bg-[#050505] px-6 py-10 max-w-7xl mx-auto">
 
@@ -114,11 +126,36 @@ export default function AdminDashboard({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-10">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
         <StatCard label="Monthly Revenue" value={`$${mrr.toLocaleString('en-US', { minimumFractionDigits: 0 })}`} sub="MRR" />
-        <StatCard label="Live Clients" value={stats.live_count ?? '0'} />
-        <StatCard label="Pending Payment" value={stats.pending_payment ?? '0'} />
-        <StatCard label="Past Due" value={stats.past_due_count ?? '0'} />
+        <StatCard label="Live Clients"    value={stats.live_count        ?? '0'} />
+        <StatCard label="Leads"           value={stats.lead_count        ?? '0'} />
+        <StatCard label="Interested"      value={stats.interested_count  ?? '0'} sub="needs follow-up" />
+        <StatCard label="Pending Payment" value={stats.pending_payment   ?? '0'} />
+        <StatCard label="Past Due"        value={stats.past_due_count    ?? '0'} />
+      </div>
+
+      {/* Table filter tabs */}
+      <div className="flex gap-1 mb-4 border-b border-[#1a1a1a]">
+        {([
+          { key: 'all',        label: 'All',        count: clients.length },
+          { key: 'leads',      label: 'Leads',      count: parseInt(stats.lead_count ?? '0') },
+          { key: 'interested', label: 'Interested', count: parseInt(stats.interested_count ?? '0') },
+          { key: 'active',     label: 'Active',     count: parseInt(stats.live_count ?? '0') },
+        ] as { key: TableFilter; label: string; count: number }[]).map(t => (
+          <button key={t.key} onClick={() => setTableFilter(t.key)}
+            className={`px-4 py-2 text-xs font-mono uppercase tracking-widest transition-colors border-b-2 -mb-px ${
+              tableFilter === t.key
+                ? 'border-[#c9a84c] text-[#c9a84c]'
+                : 'border-transparent text-[#555] hover:text-[#9a9a9a]'
+            }`}>
+            {t.label}{t.count > 0 ? ` (${t.count})` : ''}
+          </button>
+        ))}
+        <a href="/leads" target="_blank"
+          className="ml-auto px-4 py-2 text-xs font-mono text-[#555] hover:text-[#c9a84c] transition-colors">
+          Contractor View ↗
+        </a>
       </div>
 
       {/* Client Table */}
@@ -132,11 +169,11 @@ export default function AdminDashboard({
           <span className="col-span-2">Actions</span>
         </div>
 
-        {clients.length === 0 && (
-          <p className="text-[#555] text-sm text-center py-12">No clients yet.</p>
+        {visibleClients.length === 0 && (
+          <p className="text-[#555] text-sm text-center py-12">Nothing here yet.</p>
         )}
 
-        {clients.map(c => {
+        {visibleClients.map(c => {
           const clientEvents = eventsByClient[c.id] || [];
           const isExpanded   = expanded === c.id;
 
