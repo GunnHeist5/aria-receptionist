@@ -1,0 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #050505;
+    --foreground: #f5f2ee;
+    --gold: #c9a84c;
+    --secondary-text: #9a9a9a;
+    --border-color: #1a1a1a;
+    --card-bg: #0a0a0a;
+  }
+}
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    @apply bg-[#050505] text-[#f5f2ee];
+    font-family: 'DM Mono', monospace;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Cormorant Garamond', serif;
+  }
+
+  /* Grain texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    background-image:
+      url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise" seed="2"/></filter><rect width="100%" height="100%" fill="%23050505" filter="url(%23noise)" opacity="0.03"/></svg>');
+    background-size: 400px 400px;
+    z-index: 1;
+  }
+
+  /* Custom cursor */
+  cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="3" fill="%23c9a84c"/><circle cx="10" cy="10" r="6" fill="none" stroke="%23c9a84c" stroke-width="1"/></svg>') 10 10, auto;
+
+  /* Selection styling */
+  ::selection {
+    @apply bg-[#c9a84c] text-[#050505];
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-[#050505];
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-[#c9a84c] rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-[#d4b856];
+}

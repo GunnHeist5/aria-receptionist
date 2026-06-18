@@ -1,0 +1,17 @@
+{
+  "name": "onboarding",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Onboarding pipeline — takes a client from status='won' to status='live' in five resumable steps.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test __tests__/**/*.test.js",
+    "test:watch": "node --test --watch __tests__/**/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

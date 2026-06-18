@@ -1,0 +1,20 @@
+{
+  "name": "ai-receptionist-db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Database spine for the AI-receptionist agency platform (Postgres, plain SQL migrations).",
+  "type": "commonjs",
+  "scripts": {
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "verify": "node scripts/verify.js",
+    "setup": "node scripts/migrate.js && node scripts/seed.js && node scripts/verify.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "voice-provider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VoiceProvider adapter — the single isolated seam where the voice vendor plugs in.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test __tests__/**/*.test.js",
+    "test:watch": "node --test --watch __tests__/**/*.test.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
