@@ -61,18 +61,10 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Google Places API ─────────────────────────────────────────────────────────
 
-async function geocodeLocation(location) {
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=${API_KEY}`;
-  const data = await get(url);
-  if (data.status !== 'OK' || !data.results.length) {
-    throw new Error(`Geocoding failed for "${location}": ${data.status}`);
-  }
-  const { lat, lng } = data.results[0].geometry.location;
-  return { lat, lng };
-}
-
-async function textSearch(query, lat, lng, radius, pageToken) {
-  let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${lat},${lng}&radius=${radius}&key=${API_KEY}`;
+// Embeds location in the query — no Geocoding API needed (Places API only).
+async function textSearch(query, location, pageToken) {
+  const q = `${query} in ${location}`;
+  let url  = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(q)}&key=${API_KEY}`;
   if (pageToken) url += `&pagetoken=${encodeURIComponent(pageToken)}`;
   return get(url);
 }
@@ -103,11 +95,6 @@ async function main() {
   console.log(`Query    : ${QUERY}`);
   console.log(`Max leads: ${MAX}\n`);
 
-  // Geocode
-  console.log('Geocoding location...');
-  const { lat, lng } = await geocodeLocation(LOCATION);
-  console.log(`Coordinates: ${lat}, ${lng}\n`);
-
   // Collect place IDs across pages
   const placeIds   = [];
   let   pageToken  = null;
@@ -118,7 +105,7 @@ async function main() {
     page++;
     console.log(`Fetching page ${page}...`);
 
-    const res = await textSearch(QUERY, lat, lng, RADIUS, pageToken);
+    const res = await textSearch(QUERY, LOCATION, pageToken);
 
     if (res.status !== 'OK' && res.status !== 'ZERO_RESULTS') {
       throw new Error(`Places API error: ${res.status} — ${res.error_message ?? ''}`);
