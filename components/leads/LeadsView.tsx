@@ -41,18 +41,29 @@ function LeadCard({ lead, contractorId, onStatus }: {
   contractorId: string | null;
   onStatus: (id: string, s: string) => void;
 }) {
-  const [loading, setLoading] = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [copied,      setCopied]      = useState(false);
   const status = lead.call_status ?? 'new';
 
   async function setStatus(s: string) {
     setLoading(true);
-    await fetch(`/api/clients/${lead.id}/call-status`, {
+    const res  = await fetch(`/api/clients/${lead.id}/call-status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: s, contractorId }),
     });
+    const data = await res.json();
+    if (data.checkoutUrl) setCheckoutUrl(data.checkoutUrl);
     onStatus(lead.id, s);
     setLoading(false);
+  }
+
+  async function copyLink() {
+    if (!checkoutUrl) return;
+    await navigator.clipboard.writeText(checkoutUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   }
 
   const borderColor = status === 'interested' ? 'border-[#c9a84c]/40'
@@ -98,7 +109,14 @@ function LeadCard({ lead, contractorId, onStatus }: {
         ))}
       </div>
 
-      {status !== 'new' && (
+      {checkoutUrl && (
+        <button onClick={copyLink}
+          className="w-full text-sm py-3 border border-[#c9a84c] text-[#c9a84c] bg-[#c9a84c]/10 hover:bg-[#c9a84c]/20 transition-colors font-medium">
+          {copied ? '✓ Copied — send to client!' : '📋 Copy Payment Link'}
+        </button>
+      )}
+
+      {status !== 'new' && !checkoutUrl && (
         <p className={`text-xs ${STATUS_COLOR[status] ?? 'text-[#555]'}`}>
           {STATUS_LABEL[status]}
           {lead.last_called_at && ` — ${new Date(lead.last_called_at).toLocaleDateString()}`}
