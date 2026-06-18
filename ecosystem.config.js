@@ -29,5 +29,16 @@ module.exports = {
         VOICE_PROVIDER: 'trillet',
       },
     },
+    {
+      name: 'aria-scraper',
+      script: 'workers/auto-scraper.js',
+      cwd: '/var/www/aria',
+      cron_restart: '0 * * * *',
+      autorestart: false,
+      watch: false,
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
   ],
 };

@@ -1,0 +1,5 @@
+[
+  { "key": "plumber",     "query": "plumber plumbing" },
+  { "key": "hvac",        "query": "HVAC heating air conditioning" },
+  { "key": "electrician", "query": "electrician electrical contractor" }
+]
