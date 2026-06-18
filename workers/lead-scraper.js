@@ -107,13 +107,18 @@ async function main() {
   let   page       = 0;
 
   while (placeIds.length < MAX) {
-    if (page > 0) await sleep(2000); // Google requires a short delay between pages
+    if (page > 0) await sleep(3000); // Google page tokens need ~3s to become valid
     page++;
     console.log(`Fetching page ${page}...`);
 
     const res = await textSearch(QUERY, pageToken);
 
-    if (res.status !== 'OK' && res.status !== 'ZERO_RESULTS') {
+    if (res.status === 'ZERO_RESULTS') break;
+    if (res.status === 'INVALID_REQUEST') {
+      console.log('  No more pages available.');
+      break;
+    }
+    if (res.status !== 'OK') {
       throw new Error(`Places API error: ${res.status} — ${res.error_message ?? ''}`);
     }
 
