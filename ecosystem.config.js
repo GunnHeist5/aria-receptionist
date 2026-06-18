@@ -33,6 +33,8 @@ module.exports = {
       name: 'aria-scraper',
       script: 'workers/auto-scraper.js',
       cwd: '/var/www/aria',
+      interpreter: 'node',
+      interpreter_args: '--env-file=/var/www/aria/.env',
       cron_restart: '0 * * * *',
       autorestart: false,
       watch: false,
