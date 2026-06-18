@@ -15,9 +15,14 @@
 const path   = require('path');
 const https  = require('https');
 
-// Load env from root .env first
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
-require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
+// Load env from root .env (dotenv optional — Node 20+ supports --env-file flag)
+try {
+  const dotenv = require('dotenv');
+  dotenv.config({ path: path.join(__dirname, '../.env') });
+  dotenv.config({ path: path.join(__dirname, '../.env.local') });
+} catch {
+  // dotenv not installed; rely on --env-file or pre-exported env vars
+}
 
 const { Pool } = require('pg');
 

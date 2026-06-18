@@ -178,9 +178,8 @@ async function onPaymentFailed(invoice: Stripe.Invoice, db: Pool, deprovisionFn:
   // 2nd failed attempt → cancel subscription immediately; subscription.deleted webhook
   // will handle DB churn + deprovision.
   if (attemptCount >= 2) {
-    const subscriptionId = typeof invoice.subscription === 'string'
-      ? invoice.subscription
-      : (invoice.subscription as Stripe.Subscription | null)?.id;
+    const sub            = (invoice as any).subscription;
+    const subscriptionId = typeof sub === 'string' ? sub : (sub as Stripe.Subscription | null)?.id;
 
     if (subscriptionId) {
       try {
