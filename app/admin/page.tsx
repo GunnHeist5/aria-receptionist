@@ -6,6 +6,11 @@ export const dynamic = 'force-dynamic';
 export default async function AdminPage() {
   const pool = getPool();
 
+  // Add column on first deploy — safe to run every time
+  await pool.query(`
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS number_verified BOOLEAN NOT NULL DEFAULT false
+  `).catch(() => {/* column may already exist with constraints */});
+
   const [statsRes, clientsRes, eventsRes] = await Promise.all([
     pool.query(`
       SELECT
@@ -20,7 +25,7 @@ export default async function AdminPage() {
     pool.query(`
       SELECT id, business_name, city, state, status, billing_status,
              provisioned_number, mrr, activated_at, created_at,
-             forward_to_number
+             forward_to_number, number_verified
       FROM clients
       ORDER BY created_at DESC
     `),

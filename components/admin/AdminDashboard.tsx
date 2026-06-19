@@ -14,6 +14,7 @@ type Client = {
   activated_at: string | null;
   created_at: string;
   forward_to_number: string | null;
+  number_verified: boolean;
 };
 
 type Event = {
@@ -81,11 +82,20 @@ export default function AdminDashboard({
   const [expanded,    setExpanded]    = useState<string | null>(null);
   const [copied,      setCopied]      = useState<string | null>(null);
   const [tableFilter, setTableFilter] = useState<TableFilter>('all');
+  const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
+  const [fixing,      setFixing]      = useState<string | null>(null);
 
   const eventsByClient = events.reduce<Record<string, Event[]>>((acc, e) => {
     (acc[e.client_id] ??= []).push(e);
     return acc;
   }, {});
+
+  async function markFixed(clientId: string) {
+    setFixing(clientId);
+    await fetch(`/api/clients/${clientId}/verify-number`, { method: 'PATCH' });
+    setVerifiedIds(prev => new Set([...prev, clientId]));
+    setFixing(null);
+  }
 
   async function copyPaymentLink(clientId: string) {
     const res = await fetch('/api/billing/generate-checkout', {
@@ -102,6 +112,13 @@ export default function AdminDashboard({
   }
 
   const mrr = parseFloat(stats.total_mrr || '0');
+
+  // Clients with an active bot whose number hasn't been swapped yet
+  const fixRequired = clients.filter(c =>
+    (c.status === 'live' || c.status === 'provisioning') &&
+    !c.number_verified &&
+    !verifiedIds.has(c.id)
+  );
 
   const visibleClients = clients.filter(c => {
     if (tableFilter === 'leads')     return c.status === 'lead';
@@ -124,6 +141,51 @@ export default function AdminDashboard({
           + New Client
         </a>
       </div>
+
+      {/* Fix Required checklist */}
+      {fixRequired.length > 0 && (
+        <div className="mb-8 border border-yellow-900/60 bg-yellow-950/20 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-yellow-400 text-xs font-mono uppercase tracking-widest">
+              ⚠ Number Fix Required — {fixRequired.length} bot{fixRequired.length > 1 ? 's' : ''}
+            </span>
+            <a
+              href="https://app.trillet.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto text-xs text-[#555] hover:text-[#c9a84c] transition-colors border border-[#1a1a1a] px-3 py-1">
+              Open Trillet ↗
+            </a>
+          </div>
+          <p className="text-xs text-[#555] mb-4 leading-relaxed">
+            API-provisioned numbers lack a LiveKit inbound trunk.
+            For each bot below: go to Trillet → Phone Numbers → release the number → re-purchase through the UI, then link it to the agent. Check off when done.
+          </p>
+          <div className="space-y-2">
+            {fixRequired.map(c => (
+              <div key={c.id}
+                className="flex items-center gap-4 text-sm border border-[#1a1a1a] px-4 py-3 hover:bg-[#0a0a0a] transition-colors">
+                <div className="flex-1 min-w-0">
+                  <span className="text-[#f5f2ee]">{c.business_name}</span>
+                  {c.provisioned_number && (
+                    <span className="ml-3 text-xs font-mono text-[#555]">{c.provisioned_number}</span>
+                  )}
+                  <span className="ml-2 text-xs text-[#333]">
+                    {[c.city, c.state].filter(Boolean).join(', ')}
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-yellow-600">needs swap</span>
+                <button
+                  onClick={() => markFixed(c.id)}
+                  disabled={fixing === c.id}
+                  className="text-xs border border-emerald-900 text-emerald-400 px-3 py-1 hover:bg-emerald-950/40 transition-colors disabled:opacity-50">
+                  {fixing === c.id ? 'Saving…' : 'Mark Fixed ✓'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
