@@ -4,9 +4,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 
-const SERVICES = [
-  'Drain cleaning', 'Leak repair', 'Water heaters', 'Sewer repair',
-  'Pipe installation', 'Emergency plumbing', 'Hydro jetting', 'Camera inspection',
+const SERVICE_GROUPS = [
+  {
+    label: 'Plumbing',
+    items: ['Drain cleaning', 'Leak repair', 'Water heaters', 'Sewer repair',
+            'Pipe installation', 'Emergency plumbing', 'Hydro jetting', 'Camera inspection'],
+  },
+  {
+    label: 'HVAC',
+    items: ['AC repair', 'AC installation', 'Heating repair', 'Furnace installation',
+            'Duct cleaning', 'Air quality', 'Thermostat install', 'Emergency HVAC'],
+  },
 ];
 
 type F = Record<string, string>;
@@ -29,6 +37,7 @@ export default function IntakeForm() {
   const [form, setForm] = useState<F>(DEFAULTS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [customInput, setCustomInput] = useState('');
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -37,6 +46,13 @@ export default function IntakeForm() {
     const curr = form.services.split(',').map(s => s.trim()).filter(Boolean);
     const next = curr.includes(svc) ? curr.filter(s => s !== svc) : [...curr, svc];
     setForm(f => ({ ...f, services: next.join(', ') }));
+  }
+
+  function addCustom() {
+    const val = customInput.trim();
+    if (!val) return;
+    toggleService(val);
+    setCustomInput('');
   }
 
   async function submit(e: React.FormEvent) {
@@ -62,6 +78,7 @@ export default function IntakeForm() {
   }
 
   const active = (svc: string) => form.services.split(',').map(s => s.trim()).includes(svc);
+
 
   return (
     <form onSubmit={submit} className="space-y-10">
@@ -159,13 +176,32 @@ export default function IntakeForm() {
       {/* Services */}
       <section>
         <SectionHeader n="04" title="Services Offered" />
-        <div className="flex flex-wrap gap-2 mb-3">
-          {SERVICES.map(svc => (
-            <button key={svc} type="button" onClick={() => toggleService(svc)}
-              className={`px-3 py-1.5 text-xs border transition-colors ${active(svc) ? 'border-[#c9a84c] text-[#c9a84c] bg-[#c9a84c]/5' : 'border-[#1a1a1a] text-[#555] hover:border-[#333]'}`}>
-              {svc}
-            </button>
-          ))}
+        {SERVICE_GROUPS.map(group => (
+          <div key={group.label} className="mb-4">
+            <p className="text-xs text-[#555] uppercase tracking-widest mb-2">{group.label}</p>
+            <div className="flex flex-wrap gap-2">
+              {group.items.map(svc => (
+                <button key={svc} type="button" onClick={() => toggleService(svc)}
+                  className={`px-3 py-1.5 text-xs border transition-colors ${active(svc) ? 'border-[#c9a84c] text-[#c9a84c] bg-[#c9a84c]/5' : 'border-[#1a1a1a] text-[#555] hover:border-[#333]'}`}>
+                  {svc}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="flex gap-2 mt-2">
+          <input
+            type="text"
+            value={customInput}
+            onChange={e => setCustomInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } }}
+            placeholder="Add custom service..."
+            className="flex-1 bg-[#0a0a0a] border border-[#1a1a1a] text-[#f5f2ee] px-3 py-2 text-xs focus:outline-none focus:border-[#c9a84c] transition-colors placeholder-[#333]"
+          />
+          <button type="button" onClick={addCustom}
+            className="px-4 py-2 text-xs border border-[#1a1a1a] text-[#9a9a9a] hover:border-[#c9a84c] hover:text-[#c9a84c] transition-colors">
+            +
+          </button>
         </div>
       </section>
 
