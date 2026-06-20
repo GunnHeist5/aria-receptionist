@@ -7,6 +7,7 @@ const flags                = require('../config/flags');
 const { screenCandidate }  = require('../agents/screener');
 const { coachRep }         = require('../agents/coach');
 const { analyzeForOffboarding } = require('../agents/offboard-proposer');
+const { runScriptLoop }         = require('../agents/script-iterator');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -268,6 +269,101 @@ async function executeOffboarding(proposalId, rep, message) {
   await tg.sendToOwner(`✅ Offboarding executed for ${rep.name}.`);
 }
 
+// ---------------------------------------------------------------------------
+// ONBOARDING SEQUENCE — checks every tick, sends by day since signing
+// ---------------------------------------------------------------------------
+const ONBOARDING_STEPS = [
+  {
+    day: 1,
+    message: (rep, intakeLink) =>
+      `Hey ${rep.name.split(' ')[0]}! Here's everything you need to hit the ground running:\n\n` +
+      `🔗 <b>Your intake link</b> (send this to close a deal):\n${intakeLink}\n\n` +
+      `📋 <b>Daily routine:</b>\n` +
+      `• Log your activity every day: /log [dials] [connects] [demos] [closes]\n` +
+      `• Track your stats anytime: /stats\n` +
+      `• Log objections you hit: /objection [what they said]\n` +
+      `• Ask me anything about the product or script — just message here\n\n` +
+      `Start with at least 50 dials tomorrow. Let's go.`,
+  },
+  {
+    day: 2,
+    message: (rep) =>
+      `Day 2 — here's the script framework.\n\n` +
+      `<b>Opening:</b>\n"Hi [Name], quick question — when someone calls your business after hours and you don't pick up, what happens?"\n\n` +
+      `<b>Transition:</b>\n"We built an AI that catches those calls 24/7, qualifies them, and texts you the lead instantly. Takes 10 minutes to set up. Worth 2 minutes to hear how it works?"\n\n` +
+      `<b>Key points:</b>\n• $297/mo, $500 setup. No contract, cancel anytime.\n• Works for any service business (HVAC, plumbing, electrical, roofing)\n• They keep their existing number — the AI answers missed calls only\n• 14-day money-back guarantee\n\n` +
+      `[PLACEHOLDER — replace with your validated script once you prove it]\n\nGot questions? Just ask me.`,
+  },
+  {
+    day: 3,
+    message: (rep) =>
+      `Day 3 — objection handling basics.\n\n` +
+      `<b>"We already have voicemail"</b>\n→ "Voicemail loses leads — 80% of callers don't leave a message. This texts you the lead and asks the caller qualifying questions. Totally different."\n\n` +
+      `<b>"We're too busy / not interested"</b>\n→ "Totally get it. Quick question — what do you do with the calls you miss at 9pm or on weekends? That's exactly the gap this fills."\n\n` +
+      `<b>"How much does it cost?"</b>\n→ "One client you would've lost covers the first month. It's $297/mo. Want me to send you the breakdown?"\n\n` +
+      `[PLACEHOLDER — replace after you prove real objections]\n\nLog any new objections with /objection and I'll update this as we learn.`,
+  },
+  {
+    day: 7,
+    message: (rep) =>
+      `One week in — how's it going ${rep.name.split(' ')[0]}?\n\nCheck your numbers with /stats. If your connect rate is under 5%, try calling between 8-9am or 4-6pm local time for the business.\n\nWhat's the toughest objection you've been hitting? Log it with /objection and I'll work on a fix.`,
+  },
+];
+
+async function runOnboarding() {
+  const { rows: reps } = await pool.query(`
+    SELECT c.*, co.slug
+    FROM contractors c
+    LEFT JOIN contractors co ON co.id = c.id
+    WHERE c.active=true AND c.contract_signed_at IS NOT NULL AND c.onboarding_step < $1 AND c.channel_id IS NOT NULL
+  `, [ONBOARDING_STEPS.length]);
+
+  for (const rep of reps) {
+    try {
+      const daysSinceSigning = Math.floor(
+        (Date.now() - new Date(rep.contract_signed_at).getTime()) / 86_400_000
+      );
+
+      const nextStep = ONBOARDING_STEPS[rep.onboarding_step];
+      if (!nextStep || daysSinceSigning < nextStep.day) continue;
+
+      const intakeLink = rep.slug
+        ? `https://reachwellhq.com/intake?ref=${rep.slug}`
+        : 'https://reachwellhq.com/intake (ask manager for your ref link)';
+
+      const msg = nextStep.message(rep, intakeLink);
+      await tg.send(rep.channel_id, msg);
+      await pool.query(
+        `UPDATE contractors SET onboarding_step = $2, updated_at=NOW() WHERE id = $1`,
+        [rep.id, rep.onboarding_step + 1]
+      );
+    } catch (err) {
+      console.error('[onboarding] error for rep', rep.id, err.message);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SCRIPT LOOP — runs weekly (Monday morning UTC)
+// ---------------------------------------------------------------------------
+let lastScriptRun = null;
+
+async function runScriptLoopIfDue() {
+  const now = new Date();
+  const isMonday = now.getUTCDay() === 1;
+  const isHour   = now.getUTCHours() === 9; // 9am UTC
+  const key      = `${now.getUTCFullYear()}-W${Math.floor(now.getUTCDate() / 7)}`;
+
+  if (!isMonday || !isHour || lastScriptRun === key) return;
+  lastScriptRun = key;
+
+  try {
+    await runScriptLoop(pool, tg.sendToOwner.bind(tg), tg.approvalKeyboard.bind(tg));
+  } catch (err) {
+    console.error('[script-loop]', err.message);
+  }
+}
+
 // Expose for Telegram webhook handler to call
 module.exports = { executeOffboarding };
 
@@ -283,6 +379,8 @@ async function tick() {
 
   await runScreening().catch(e => console.error('[tick:screening]', e.message));
   await runMonitoring().catch(e => console.error('[tick:monitoring]', e.message));
+  await runOnboarding().catch(e => console.error('[tick:onboarding]', e.message));
+  await runScriptLoopIfDue().catch(e => console.error('[tick:script-loop]', e.message));
 
   if (hourUTC === flags.COACHING_HOUR_UTC && lastCoachingRun !== now.toDateString()) {
     lastCoachingRun = now.toDateString();

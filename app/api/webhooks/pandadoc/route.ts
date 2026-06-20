@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
        contract_document_id = $2,
        contract_signed_at   = NOW(),
        onboarding_status    = 'contract_signed',
+       onboarding_step      = 1,
        updated_at           = NOW()
      WHERE id = $1`,
     [contractorId, docId]

@@ -233,6 +233,38 @@ async function onSubscriptionCanceled(
     [client.id, JSON.stringify({ event: 'subscription_canceled', subscriptionId: subscription.id })]
   );
 
+  // Clawback commissions if client churned within clawback window
+  const clawbackDays = parseInt(process.env.COMMISSION_CLAWBACK_DAYS ?? '90', 10);
+  const { rows: churned } = await db.query(
+    `SELECT contractor_id, created_at FROM clients WHERE id=$1 AND contractor_id IS NOT NULL`, [client.id]
+  );
+  if (churned.length && churned[0].contractor_id) {
+    const daysHeld = Math.floor((Date.now() - new Date(churned[0].created_at).getTime()) / 86_400_000);
+    if (daysHeld <= clawbackDays) {
+      const { rows: clawed } = await db.query(
+        `UPDATE commissions SET status='clawed_back', updated_at=NOW()
+         WHERE client_id=$1 AND status='accrued' RETURNING contractor_id, amount`,
+        [client.id]
+      );
+      if (clawed.length) {
+        const total = clawed.reduce((s: number, r: any) => s + Number(r.amount), 0).toFixed(2);
+        const { rows: [rep] } = await db.query(
+          `SELECT channel_id, name FROM contractors WHERE id=$1`, [clawed[0].contractor_id]
+        );
+        if (rep?.channel_id && process.env.TELEGRAM_BOT_TOKEN) {
+          await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: rep.channel_id,
+              text: `⚠️ Commission clawback: a client you brought in canceled within ${clawbackDays} days. $${total} has been reversed per your contractor agreement.`,
+            }),
+          });
+        }
+      }
+    }
+  }
+
   // Deprovision voice resources if the client was live
   if (client.voice_provider_account_id && client.status === 'live') {
     try {
