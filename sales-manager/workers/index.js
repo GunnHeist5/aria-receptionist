@@ -312,10 +312,8 @@ const ONBOARDING_STEPS = [
 
 async function runOnboarding() {
   const { rows: reps } = await pool.query(`
-    SELECT c.*, co.slug
-    FROM contractors c
-    LEFT JOIN contractors co ON co.id = c.id
-    WHERE c.active=true AND c.contract_signed_at IS NOT NULL AND c.onboarding_step < $1 AND c.channel_id IS NOT NULL
+    SELECT * FROM contractors
+    WHERE active=true AND contract_signed_at IS NOT NULL AND onboarding_step < $1 AND channel_id IS NOT NULL
   `, [ONBOARDING_STEPS.length]);
 
   for (const rep of reps) {

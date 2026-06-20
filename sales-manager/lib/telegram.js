@@ -39,7 +39,8 @@ async function answerCallback(callbackQueryId, text = 'Done') {
 
 // Call once to register our Next.js endpoint as the Telegram webhook.
 async function registerWebhook(baseUrl) {
-  const url = `${baseUrl}/api/webhooks/telegram`;
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const url    = `${baseUrl}/api/webhooks/telegram${secret ? `?secret=${secret}` : ''}`;
   const res = await fetch(`${BASE}/setWebhook`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
