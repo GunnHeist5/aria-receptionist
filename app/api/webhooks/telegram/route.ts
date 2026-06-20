@@ -1,17 +1,107 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const tg = require('../../../../sales-manager/lib/telegram');
+const tg          = require('../../../../sales-manager/lib/telegram');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { answerQuestion } = require('../../../../sales-manager/agents/trainer');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { executeOffboarding } = require('../../../../sales-manager/workers/index');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { chat: ownerChat } = require('../../../../sales-manager/lib/owner-chat');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const cs = require('../../../../sales-manager/lib/call-session');
 
-const BOT_TOKEN  = process.env.TELEGRAM_BOT_TOKEN ?? '';
-const OWNER_ID   = process.env.TELEGRAM_OWNER_CHAT_ID ?? '';
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? '';
+const OWNER_ID  = process.env.TELEGRAM_OWNER_CHAT_ID ?? '';
 
+// ── Save a completed call session to DB ────────────────────────────────────
+async function saveCall(pool: any, chatId: string, isOwner: boolean, contractorId: string | null, session: any, noteText?: string) {
+  const note = noteText?.trim() || null;
+  await pool.query(
+    `INSERT INTO call_outcomes
+       (contractor_id, is_owner, outcome, primary_objection, demo_method, notes, logged_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+    [contractorId, isOwner, session.outcome, session.primary_objection ?? null,
+     session.demo_method ?? 'none', note]
+  );
+}
+
+// ── /insights aggregation ──────────────────────────────────────────────────
+async function buildInsights(pool: any, contractorId: string | null, isOwner: boolean): Promise<string> {
+  const scope  = isOwner ? '' : 'AND contractor_id = $1';
+  const params = isOwner ? [] : [contractorId];
+  const offset = isOwner ? 0 : 1;
+
+  const [totRow, outRows, objRows, demoRows, notesRows] = await Promise.all([
+    pool.query(`SELECT COUNT(*) AS n FROM call_outcomes WHERE logged_at >= NOW() - INTERVAL '30 days' ${scope}`, params),
+    pool.query(`SELECT outcome, COUNT(*) AS n FROM call_outcomes WHERE logged_at >= NOW() - INTERVAL '30 days' ${scope} GROUP BY outcome ORDER BY n DESC`, params),
+    pool.query(`SELECT primary_objection, COUNT(*) AS n FROM call_outcomes WHERE logged_at >= NOW() - INTERVAL '30 days' AND primary_objection IS NOT NULL AND primary_objection != 'none' ${scope} GROUP BY primary_objection ORDER BY n DESC LIMIT 6`, params),
+    pool.query(`SELECT demo_method, COUNT(*) AS total, COUNT(*) FILTER (WHERE outcome='closed') AS closes FROM call_outcomes WHERE logged_at >= NOW() - INTERVAL '30 days' ${scope} GROUP BY demo_method ORDER BY closes DESC`, params),
+    pool.query(`SELECT notes FROM call_outcomes WHERE logged_at >= NOW() - INTERVAL '30 days' AND notes IS NOT NULL ${scope} ORDER BY logged_at DESC LIMIT 8`, params),
+  ]);
+
+  const total = Number(totRow.rows[0]?.n ?? 0);
+  if (total === 0) return '📊 No calls logged yet. Use /call to start capturing.';
+
+  const pct = (n: number) => total > 0 ? `${Math.round((n / total) * 100)}%` : '—';
+  const pad = (s: string, w: number) => s.padEnd(w);
+
+  // Outcomes
+  const outcomeMap: Record<string, number> = {};
+  for (const r of outRows.rows) outcomeMap[r.outcome] = Number(r.n);
+  const outcomeLabels: Record<string, string> = {
+    closed: 'Closed', interested_followup: 'Interested', callback_scheduled: 'Callback',
+    demo_given_no_close: 'Demo, no close', not_interested: 'Not interested', no_answer_voicemail: 'No answer',
+  };
+  const outcomeLines = Object.entries(outcomeLabels)
+    .filter(([k]) => outcomeMap[k])
+    .map(([k, label]) => `${pad(label, 18)} ${String(outcomeMap[k]).padStart(3)}  ${pct(outcomeMap[k])}`)
+    .join('\n');
+
+  // Objections
+  const objLabels: Record<string, string> = {
+    price: 'Price', setup_fee: 'Setup fee', dont_trust_ai: "Don't trust AI",
+    too_busy: 'Too busy', already_have_solution: 'Have solution',
+    not_decision_maker: 'Not DM', no_need: 'No need', other: 'Other',
+  };
+  const objLines = objRows.rows
+    .map((r: any) => `${pad(objLabels[r.primary_objection] ?? r.primary_objection, 18)} ${String(r.n).padStart(3)}  ${pct(Number(r.n))}`)
+    .join('\n') || '  (none logged yet)';
+
+  // Demo method effect
+  const demoLabels: Record<string, string> = {
+    live_conference: 'Live/conference', recording: 'Recording',
+    call_back_themselves: 'They call back', none: 'No demo',
+  };
+  const demoLines = demoRows.rows
+    .map((r: any) => {
+      const t = Number(r.total), c = Number(r.closes);
+      const rate = t > 0 ? `${Math.round((c / t) * 100)}%` : '—';
+      return `${pad(demoLabels[r.demo_method] ?? r.demo_method, 18)} ${String(t).padStart(3)} calls  ${String(c).padStart(2)} closed  (${rate})`;
+    })
+    .join('\n') || '  (none)';
+
+  // Recent notes
+  const noteLines = notesRows.rows
+    .map((r: any) => `• ${r.notes.slice(0, 60)}`)
+    .join('\n') || '  (none yet)';
+
+  return `📊 <b>${total} calls logged — last 30 days</b>
+
+<b>OUTCOMES</b>
+<pre>${outcomeLines}</pre>
+
+<b>TOP OBJECTIONS</b>
+<pre>${objLines}</pre>
+
+<b>DEMO METHOD vs CLOSE RATE</b>
+<pre>${demoLines}</pre>
+
+<b>RECENT NOTES</b>
+${noteLines}`;
+}
+
+// ── Main handler ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   if (searchParams.get('secret') !== process.env.TELEGRAM_WEBHOOK_SECRET) {
@@ -21,137 +111,181 @@ export async function POST(req: NextRequest) {
   const update = await req.json();
   const pool   = getPool();
 
-  // ── CALLBACK QUERY (approve/deny buttons) ─────────────────────────────────
+  // ── CALLBACK QUERY ────────────────────────────────────────────────────────
   if (update.callback_query) {
-    const cb   = update.callback_query;
-    const data = cb.data as string;
+    const cb     = update.callback_query;
+    const data   = cb.data as string;
+    const chatId = String(cb.from?.id ?? cb.message?.chat?.id ?? '');
+
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ callback_query_id: cb.id }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: cb.id }),
     });
 
+    // ── Call flow callbacks ──────────────────────────────────────────────
+    if (data.startsWith('call:')) {
+      const [, field, value] = data.split(':');
+      const session = cs.get(chatId);
+      if (!session) return NextResponse.json({ ok: true });
+
+      const isOwner = chatId === OWNER_ID;
+      let contractorId: string | null = null;
+      if (!isOwner) {
+        const { rows: [rep] } = await pool.query(
+          `SELECT id FROM contractors WHERE channel_id=$1 AND active=true LIMIT 1`, [chatId]
+        );
+        if (!rep) { cs.clear(chatId); return NextResponse.json({ ok: true }); }
+        contractorId = rep.id;
+      }
+
+      if (field === 'outcome') {
+        const next = { ...session, outcome: value };
+        if (value === 'no_answer_voicemail') {
+          cs.set(chatId, { ...next, step: 'note' });
+          await tg.send(chatId, 'Optional note (or skip):', cs.noteKeyboard());
+        } else {
+          cs.set(chatId, { ...next, step: 'objection' });
+          await tg.send(chatId, 'Main objection?', cs.objectionKeyboard());
+        }
+      } else if (field === 'objection') {
+        cs.set(chatId, { ...session, primary_objection: value, step: 'demo' });
+        await tg.send(chatId, 'Demo method?', cs.demoKeyboard());
+      } else if (field === 'demo') {
+        cs.set(chatId, { ...session, demo_method: value, step: 'note' });
+        await tg.send(chatId, 'Optional: what worked / what failed / quote (one line):', cs.noteKeyboard());
+      } else if (field === 'note' && value === 'skip') {
+        await saveCall(pool, chatId, isOwner, contractorId, cs.get(chatId));
+        cs.clear(chatId);
+        await tg.send(chatId, '✅ Call logged.');
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Approve/deny callbacks ───────────────────────────────────────────
     const [action, type, id] = data.split(':');
     if (!action || !type || !id) return NextResponse.json({ ok: true });
 
     if (type === 'candidate') {
       if (action === 'approve') {
-        const { rows: [candidate] } = await pool.query(
+        const { rows: [c] } = await pool.query(
           `UPDATE candidates SET status='offered', updated_at=NOW() WHERE id=$1 RETURNING name, email`, [id]
         );
-        await tg.sendToOwner(`✅ Offer approved for ${candidate?.name}. Send the PandaDoc contract to ${candidate?.email}.`);
+        await tg.sendToOwner(`✅ Offer approved for ${c?.name}. Send PandaDoc contract to ${c?.email}.`);
       } else {
         await pool.query(`UPDATE candidates SET status='rejected', updated_at=NOW() WHERE id=$1`, [id]);
-        await tg.sendToOwner(`Candidate archived.`);
+        await tg.sendToOwner('Candidate archived.');
       }
     }
 
     if (type === 'offboard') {
       if (action === 'approve') {
-        const { rows: [proposal] } = await pool.query(
+        const { rows: [p] } = await pool.query(
           `SELECT p.*, c.name, c.channel_id, c.id AS contractor_id
-           FROM offboarding_proposals p JOIN contractors c ON c.id=p.contractor_id
-           WHERE p.id=$1`, [id]
+           FROM offboarding_proposals p JOIN contractors c ON c.id=p.contractor_id WHERE p.id=$1`, [id]
         );
-        if (proposal) {
-          await (executeOffboarding as Function)(proposal.id, { id: proposal.contractor_id, name: proposal.name, channel_id: proposal.channel_id }, proposal.proposed_message);
-        }
+        if (p) await (executeOffboarding as Function)(p.id, { id: p.contractor_id, name: p.name, channel_id: p.channel_id }, p.proposed_message);
       } else {
         await pool.query(`UPDATE offboarding_proposals SET status='denied', updated_at=NOW() WHERE id=$1`, [id]);
-        await tg.sendToOwner(`Offboarding denied. Rep stays active.`);
+        await tg.sendToOwner('Offboarding denied.');
       }
     }
 
     if (type === 'script') {
       if (action === 'approve') {
-        const { rows: [proposal] } = await pool.query(
+        const { rows: [p] } = await pool.query(
           `UPDATE script_proposals SET status='approved', approved_at=NOW() WHERE id=$1 RETURNING proposed_script_update`, [id]
         );
-        if (proposal?.proposed_script_update) {
-          // Push updated script to KB
-          await pool.query(`
-            UPDATE knowledge_base SET content=$1, updated_at=NOW()
-            WHERE category='script' AND is_placeholder=false
-            LIMIT 1
-          `, [proposal.proposed_script_update]);
-          // If only placeholder exists, update it too
-          await pool.query(`
-            UPDATE knowledge_base SET content=$1, is_placeholder=false, updated_at=NOW()
-            WHERE category='script' AND id=(SELECT id FROM knowledge_base WHERE category='script' ORDER BY created_at LIMIT 1)
-          `, [proposal.proposed_script_update]);
-
-          // Notify all active reps
-          const { rows: reps } = await pool.query(
-            `SELECT channel_id, name FROM contractors WHERE active=true AND channel_id IS NOT NULL AND contract_signed_at IS NOT NULL`
-          );
-          for (const rep of reps) {
-            await tg.send(rep.channel_id, `📢 Script update from your manager:\n\n${proposal.proposed_script_update.slice(0, 600)}${proposal.proposed_script_update.length > 600 ? '…' : ''}`);
-          }
-          await tg.sendToOwner(`✅ Script updated in KB and pushed to ${reps.length} rep(s).`);
+        if (p?.proposed_script_update) {
+          await pool.query(`UPDATE knowledge_base SET content=$1, is_placeholder=false, updated_at=NOW() WHERE category='script' AND id=(SELECT id FROM knowledge_base WHERE category='script' ORDER BY created_at LIMIT 1)`, [p.proposed_script_update]);
+          const { rows: reps } = await pool.query(`SELECT channel_id FROM contractors WHERE active=true AND channel_id IS NOT NULL AND contract_signed_at IS NOT NULL`);
+          for (const rep of reps) await tg.send(rep.channel_id, `📢 Script update:\n\n${p.proposed_script_update.slice(0, 600)}`);
+          await tg.sendToOwner(`✅ Script updated and pushed to ${reps.length} rep(s).`);
         }
       } else {
         await pool.query(`UPDATE script_proposals SET status='denied' WHERE id=$1`, [id]);
-        await tg.sendToOwner(`Script update skipped.`);
+        await tg.sendToOwner('Script update skipped.');
       }
     }
 
     return NextResponse.json({ ok: true });
   }
 
-  // ── REGULAR MESSAGE ────────────────────────────────────────────────────────
+  // ── MESSAGE ───────────────────────────────────────────────────────────────
   if (update.message) {
     const msg    = update.message;
     const chatId = String(msg.chat.id);
     const text   = (msg.text ?? '').trim();
     if (!text) return NextResponse.json({ ok: true });
 
-    // ── OWNER AI CHAT ──────────────────────────────────────────────────────
-    if (chatId === OWNER_ID) {
-      // /reps — quick rep status table
+    const isOwner = chatId === OWNER_ID;
+
+    // ── Intercept active call session note step ────────────────────────
+    const activeSession = cs.get(chatId);
+    if (activeSession?.step === 'note') {
+      let contractorId: string | null = null;
+      if (!isOwner) {
+        const { rows: [rep] } = await pool.query(`SELECT id FROM contractors WHERE channel_id=$1 AND active=true LIMIT 1`, [chatId]);
+        contractorId = rep?.id ?? null;
+      }
+      await saveCall(pool, chatId, isOwner, contractorId, activeSession, text);
+      cs.clear(chatId);
+      await tg.send(chatId, '✅ Call logged.');
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── /call — works for owner and reps ──────────────────────────────
+    if (text === '/call') {
+      cs.set(chatId, { step: 'outcome' });
+      await tg.send(chatId, 'How did it go?', cs.outcomeKeyboard());
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── /insights — works for owner and reps ──────────────────────────
+    if (text.startsWith('/insights')) {
+      let contractorId: string | null = null;
+      if (!isOwner) {
+        const { rows: [rep] } = await pool.query(`SELECT id FROM contractors WHERE channel_id=$1 AND active=true LIMIT 1`, [chatId]);
+        contractorId = rep?.id ?? null;
+      }
+      const report = await buildInsights(pool, contractorId, isOwner);
+      await tg.send(chatId, report);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── OWNER chat ─────────────────────────────────────────────────────
+    if (isOwner) {
       if (text === '/reps') {
         const { rows } = await pool.query(`
-          SELECT c.name, c.onboarding_step,
+          SELECT c.name,
             (SELECT health_status FROM rep_metrics WHERE contractor_id=c.id ORDER BY computed_at DESC LIMIT 1) AS health,
             (SELECT total_dials FROM rep_metrics WHERE contractor_id=c.id AND period_type='week' ORDER BY computed_at DESC LIMIT 1) AS dials_7d
           FROM contractors c WHERE c.active=true ORDER BY c.created_at
         `);
-        if (!rows.length) {
-          await tg.sendToOwner('No active reps yet.');
-        } else {
-          const lines = rows.map(r => `• ${r.name} — ${r.health ?? 'no data'} | ${r.dials_7d ?? 0} dials (7d)`).join('\n');
-          await tg.sendToOwner(`<b>Active Reps</b>\n\n${lines}`);
-        }
+        await tg.sendToOwner(rows.length
+          ? `<b>Active Reps</b>\n\n${rows.map((r: any) => `• ${r.name} — ${r.health ?? 'no data'} | ${r.dials_7d ?? 0} dials (7d)`).join('\n')}`
+          : 'No active reps yet.');
         return NextResponse.json({ ok: true });
       }
 
-      // /candidates — pipeline summary
       if (text === '/candidates') {
-        const { rows } = await pool.query(
-          `SELECT status, COUNT(*) AS n FROM candidates GROUP BY status ORDER BY n DESC`
-        );
-        const lines = rows.map(r => `${r.status}: ${r.n}`).join('\n');
-        await tg.sendToOwner(`<b>Candidate Pipeline</b>\n\n${lines || 'empty'}`);
+        const { rows } = await pool.query(`SELECT status, COUNT(*) AS n FROM candidates GROUP BY status ORDER BY n DESC`);
+        await tg.sendToOwner(`<b>Candidate Pipeline</b>\n\n${rows.map((r: any) => `${r.status}: ${r.n}`).join('\n') || 'empty'}`);
         return NextResponse.json({ ok: true });
       }
 
-      // Conversational AI chat for everything else
       try {
         const reply = await ownerChat(pool, text);
         await tg.sendToOwner(reply);
       } catch (err: unknown) {
-        const msg_ = err instanceof Error ? err.message : String(err);
-        await tg.sendToOwner(`Error: ${msg_}`);
+        await tg.sendToOwner(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
       return NextResponse.json({ ok: true });
     }
 
-    // ── REP COMMANDS ───────────────────────────────────────────────────────
-    const { rows: [rep] } = await pool.query(
-      `SELECT * FROM contractors WHERE channel_id=$1 AND active=true LIMIT 1`, [chatId]
-    );
+    // ── REP commands ───────────────────────────────────────────────────
+    const { rows: [rep] } = await pool.query(`SELECT * FROM contractors WHERE channel_id=$1 AND active=true LIMIT 1`, [chatId]);
     if (!rep) return NextResponse.json({ ok: true });
 
-    // /log [dials] [connects] [demos] [closes]
     if (text.startsWith('/log')) {
       const parts = text.split(/\s+/);
       const [dials, connects, demos, closes] = parts.slice(1).map(Number);
@@ -163,56 +297,36 @@ export async function POST(req: NextRequest) {
         `INSERT INTO rep_activity (contractor_id, date, dials, connects, demos, closes)
          VALUES ($1, CURRENT_DATE, $2, $3, $4, $5)
          ON CONFLICT (contractor_id, date) DO UPDATE SET
-           dials    = rep_activity.dials    + EXCLUDED.dials,
-           connects = rep_activity.connects + EXCLUDED.connects,
-           demos    = rep_activity.demos    + EXCLUDED.demos,
-           closes   = rep_activity.closes   + EXCLUDED.closes,
-           updated_at = NOW()`,
-        [rep.id, dials || 0, connects || 0, demos || 0, closes || 0]
+           dials=$2+rep_activity.dials, connects=$3+rep_activity.connects,
+           demos=$4+rep_activity.demos, closes=$5+rep_activity.closes, updated_at=NOW()`,
+        [rep.id, dials||0, connects||0, demos||0, closes||0]
       );
       await pool.query(`UPDATE contractors SET last_active_at=NOW() WHERE id=$1`, [rep.id]);
-      await tg.send(chatId, `✅ Logged! Today: ${dials} dials, ${connects} connects, ${demos} demos, ${closes} closes. Keep pushing.`);
+      await tg.send(chatId, `✅ Logged! Today: ${dials} dials, ${connects} connects, ${demos} demos, ${closes} closes.`);
       return NextResponse.json({ ok: true });
     }
 
-    // /stats
     if (text.startsWith('/stats')) {
-      const { rows: [w] } = await pool.query(`
-        SELECT COALESCE(SUM(dials),0) AS d, COALESCE(SUM(connects),0) AS c,
-               COALESCE(SUM(demos),0) AS demos, COALESCE(SUM(closes),0) AS closes
-        FROM rep_activity WHERE contractor_id=$1 AND date >= CURRENT_DATE - 7
-      `, [rep.id]);
-      const { rows: [earned] } = await pool.query(
-        `SELECT COALESCE(SUM(amount),0) AS total FROM commissions WHERE contractor_id=$1 AND status='accrued'`, [rep.id]
-      );
-      await tg.send(chatId,
-        `📊 Your last 7 days:\n${w.d} dials · ${w.c} connects · ${w.demos} demos · ${w.closes} closes\n\n💰 Unpaid commissions: $${Number(earned.total).toFixed(2)}`
-      );
+      const { rows: [w] } = await pool.query(`SELECT COALESCE(SUM(dials),0) AS d, COALESCE(SUM(connects),0) AS c, COALESCE(SUM(demos),0) AS demos, COALESCE(SUM(closes),0) AS closes FROM rep_activity WHERE contractor_id=$1 AND date >= CURRENT_DATE - 7`, [rep.id]);
+      const { rows: [e] } = await pool.query(`SELECT COALESCE(SUM(amount),0) AS total FROM commissions WHERE contractor_id=$1 AND status='accrued'`, [rep.id]);
+      await tg.send(chatId, `📊 Last 7 days:\n${w.d} dials · ${w.c} connects · ${w.demos} demos · ${w.closes} closes\n\n💰 Unpaid: $${Number(e.total).toFixed(2)}`);
       return NextResponse.json({ ok: true });
     }
 
-    // /objection [description of objection you heard]
     if (text.startsWith('/objection')) {
-      const description = text.replace(/^\/objection\s*/i, '').trim();
-      if (!description) {
-        await tg.send(chatId, 'Usage: /objection [what they said]\nExample: /objection They said they already use an answering service');
+      const desc = text.replace(/^\/objection\s*/i, '').trim();
+      if (!desc) {
+        await tg.send(chatId, 'Usage: /objection [what they said]');
         return NextResponse.json({ ok: true });
       }
-      await pool.query(
-        `INSERT INTO objections (contractor_id, description) VALUES ($1, $2)`,
-        [rep.id, description]
-      );
-      await tg.send(chatId, `📝 Logged. I'll analyze patterns across the team weekly and update the script if a fix is clear.`);
+      await pool.query(`INSERT INTO objections (contractor_id, description) VALUES ($1, $2)`, [rep.id, desc]);
+      await tg.send(chatId, '📝 Logged. I\'ll analyze patterns weekly.');
       return NextResponse.json({ ok: true });
     }
 
-    // Anything else → trainer Q&A
+    // Trainer Q&A
     const answer = await answerQuestion(pool, rep, text);
-    await pool.query(
-      `INSERT INTO coaching_sessions (contractor_id, trigger, contractor_reply, action_taken)
-       VALUES ($1, 'inbound_message', $2, 'received')`,
-      [rep.id, text]
-    );
+    await pool.query(`INSERT INTO coaching_sessions (contractor_id, trigger, contractor_reply, action_taken) VALUES ($1, 'inbound_message', $2, 'received')`, [rep.id, text]);
     await tg.send(chatId, answer);
   }
 
