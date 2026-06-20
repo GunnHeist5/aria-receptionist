@@ -42,5 +42,18 @@ module.exports = {
         NODE_ENV: 'production',
       },
     },
+    {
+      name: 'aria-sales',
+      script: 'sales-manager/workers/index.js',
+      cwd: '/var/www/aria',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_restarts: 10,
+      restart_delay: 10000,
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
   ],
 };
