@@ -32,7 +32,7 @@ const label = 'block text-xs text-[#9a9a9a] uppercase tracking-widest mb-1.5';
 const field = 'w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#f5f2ee] px-3 py-2.5 text-sm focus:outline-none focus:border-[#c9a84c] transition-colors placeholder-[#333]';
 const select = field + ' appearance-none cursor-pointer';
 
-export default function IntakeForm() {
+export default function IntakeForm({ refSlug }: { refSlug?: string | null }) {
   const router = useRouter();
   const [form, setForm] = useState<F>(DEFAULTS);
   const [loading, setLoading] = useState(false);
@@ -63,7 +63,7 @@ export default function IntakeForm() {
       const res = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ref: refSlug ?? undefined }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Submission failed'); return; }

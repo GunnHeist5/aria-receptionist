@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     website, pricingNotes,
     forwardToNumber, areaCode, tone, businessHoursPreset,
     services, doNotSay, escalationKeywords, afterHoursBehavior,
-    alertPhone,
+    alertPhone, ref,
   } = body;
 
   if (!businessName?.trim() || !phone?.trim() || !city?.trim() ||
@@ -42,19 +42,32 @@ export async function POST(req: NextRequest) {
 
   try {
     const pool = getPool();
+
+    // Resolve referring salesperson if a slug was passed
+    let contractorId: string | null = null;
+    if (ref?.trim()) {
+      const { rows } = await pool.query(
+        `SELECT id FROM contractors WHERE slug = $1 LIMIT 1`,
+        [ref.trim().toLowerCase()]
+      );
+      contractorId = rows[0]?.id ?? null;
+    }
+
     const { rows: [client] } = await pool.query(
       `INSERT INTO clients (
          status, business_name, business_type, phone, email,
          city, state, zip, website, fit_score, tier, source,
          forward_to_number, tone, business_hours, services_offered,
          service_area, do_not_say, escalation_keywords,
-         after_hours_behavior, alert_destination, pricing_notes
+         after_hours_behavior, alert_destination, pricing_notes,
+         contractor_id
        ) VALUES (
          'won', $1, 'plumbing', $2, $3,
          $4, $5, $6, $7, 85, 'A', 'intake_form',
          $8, $9, $10::jsonb, $11,
          $12::jsonb, $13::jsonb, $14::jsonb,
-         $15, $16::jsonb, $17
+         $15, $16::jsonb, $17,
+         $18
        ) RETURNING id`,
       [
         businessName.trim(), phone.trim(), email?.trim() || null,
@@ -69,6 +82,7 @@ export async function POST(req: NextRequest) {
         afterHoursBehavior || 'voicemail',
         JSON.stringify(alertDest),
         pricingNotes?.trim() || null,
+        contractorId,
       ]
     );
 

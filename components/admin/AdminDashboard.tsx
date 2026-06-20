@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import SalesTeamTab from './SalesTeamTab';
 
 type Client = {
   id: string;
@@ -69,15 +70,16 @@ function Badge({ status, map }: { status: string; map: Record<string, string> })
   );
 }
 
-type TableFilter = 'all' | 'leads' | 'active' | 'interested';
+type TableFilter = 'all' | 'leads' | 'active' | 'interested' | 'sales';
 
 export default function AdminDashboard({
-  stats, clients, events, baseUrl,
+  stats, clients, events, baseUrl, salesReps,
 }: {
   stats: Stats;
   clients: Client[];
   events: Event[];
   baseUrl: string;
+  salesReps: unknown[];
 }) {
   const [expanded,    setExpanded]    = useState<string | null>(null);
   const [copied,      setCopied]      = useState<string | null>(null);
@@ -204,6 +206,7 @@ export default function AdminDashboard({
           { key: 'leads',      label: 'Leads',      count: parseInt(stats.lead_count ?? '0') },
           { key: 'interested', label: 'Interested', count: parseInt(stats.interested_count ?? '0') },
           { key: 'active',     label: 'Active',     count: parseInt(stats.live_count ?? '0') },
+          { key: 'sales',      label: 'Sales Team', count: salesReps.length },
         ] as { key: TableFilter; label: string; count: number }[]).map(t => (
           <button key={t.key} onClick={() => setTableFilter(t.key)}
             className={`px-4 py-2 text-xs font-mono uppercase tracking-widest transition-colors border-b-2 -mb-px ${
@@ -220,8 +223,13 @@ export default function AdminDashboard({
         </a>
       </div>
 
+      {/* Sales Team tab */}
+      {tableFilter === 'sales' && (
+        <SalesTeamTab reps={salesReps as never} baseUrl={baseUrl} />
+      )}
+
       {/* Client Table */}
-      <div className="border border-[#1a1a1a]">
+      {tableFilter !== 'sales' && <div className="border border-[#1a1a1a]">
         <div className="grid grid-cols-12 gap-2 px-4 py-2 border-b border-[#1a1a1a] text-xs text-[#555] uppercase tracking-widest font-mono">
           <span className="col-span-3">Business</span>
           <span className="col-span-2">Status</span>
@@ -307,7 +315,7 @@ export default function AdminDashboard({
             </div>
           );
         })}
-      </div>
+      </div>}
     </main>
   );
 }

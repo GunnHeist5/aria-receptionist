@@ -6,7 +6,8 @@ export const metadata: Metadata = {
   robots: 'noindex',
 };
 
-export default function IntakePage() {
+export default function IntakePage({ searchParams }: { searchParams: { ref?: string } }) {
+  const refSlug = searchParams.ref?.trim() || null;
   return (
     <main className="min-h-screen bg-[#050505] px-4 py-12 sm:px-8">
       <div className="max-w-2xl mx-auto">
@@ -23,10 +24,13 @@ export default function IntakePage() {
             Fill out the form below after closing a sale. The AI receptionist
             will be configured and live within a few minutes.
           </p>
+          {refSlug && (
+            <p className="text-xs text-[#c9a84c]/60 font-mono mt-2">ref: {refSlug}</p>
+          )}
           <div className="h-px bg-[#1a1a1a] mt-8" />
         </div>
 
-        <IntakeForm />
+        <IntakeForm refSlug={refSlug} />
 
         <p className="text-xs text-[#333] mt-8 text-center">
           ARIA Capital LLC — Internal tool. Do not share this URL.
