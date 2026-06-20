@@ -58,7 +58,7 @@ async function runScriptLoop(pool, sendToOwner, approvalKeyboard) {
 
   const topList = (result.top_objections ?? [])
     .slice(0, 3)
-    .map((o: any, i: number) => `${i + 1}. "${o.objection}" (×${o.frequency})\n   → ${o.suggested_rebuttal}`)
+    .map((o, i) => `${i + 1}. "${o.objection}" (×${o.frequency})\n   → ${o.suggested_rebuttal}`)
     .join('\n\n');
 
   const msg = `📋 <b>Weekly Script Loop</b>\n\n${result.summary_for_owner}\n\n<b>Top objections + suggested rebuttals:</b>\n\n${topList}\n\nApprove to push the script update to all reps' KB. Deny to skip.`;
