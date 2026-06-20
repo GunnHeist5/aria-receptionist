@@ -46,6 +46,8 @@ module.exports = {
       name: 'aria-sales',
       script: 'sales-manager/workers/index.js',
       cwd: '/var/www/aria',
+      interpreter: 'node',
+      interpreter_args: '--env-file=/var/www/aria/.env',
       instances: 1,
       autorestart: true,
       watch: false,
