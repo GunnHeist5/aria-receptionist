@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   if (rep?.channel_id) {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (TELEGRAM_BOT_TOKEN) {
-      const msg = `✅ Welcome to Reachwell, ${rep.name}! Your contract is signed and you're officially in.\n\nHere's what to do next:\n1. Ask me any questions about the product or script — just message here\n2. Log your daily activity with /log [dials] [connects] [demos] [closes]\n3. Your personal intake link is in the admin panel — that's your closer link\n\nLet's get to work. 💪`;
+      const msg = `✅ <b>You're in, ${rep.name.split(' ')[0]}.</b> Contract signed, you're officially a Reachwell rep.\n\nOver the next 3 days I'll send you everything you need — your pitch, objection playbook, and closer link.\n\nFor now: download this chat, you'll be using it daily.\n\nIf you have any questions before then, just text here. Talk tomorrow. 🤝`;
       await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

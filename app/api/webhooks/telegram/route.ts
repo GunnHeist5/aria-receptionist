@@ -233,6 +233,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── /help ─────────────────────────────────────────────────────────
+    if (text === '/help') {
+      const helpText = isOwner
+        ? `<b>Owner commands</b>\n\n` +
+          `<code>/call</code> — log a call outcome (3 taps)\n` +
+          `<code>/insights</code> — objection breakdown + demo close rates\n` +
+          `<code>/reps</code> — active rep health status\n` +
+          `<code>/candidates</code> — candidate pipeline\n` +
+          `<code>/log 80 12 3 1</code> — daily totals\n` +
+          `<code>/stats</code> — your numbers\n` +
+          `<code>/objection [text]</code> — log an objection\n\n` +
+          `Or just ask me anything about the business.`
+        : `<b>Your commands</b>\n\n` +
+          `<code>/call</code> — log a connect (3 taps, ~15 sec)\n` +
+          `<code>/log 80 12 3 1</code> — end-of-day totals\n` +
+          `<code>/stats</code> — your 7-day numbers + unpaid commissions\n` +
+          `<code>/objection [what they said]</code> — log an objection\n` +
+          `<code>/insights</code> — your call breakdown\n` +
+          `<code>/help</code> — this list\n\n` +
+          `Or just ask me any question about the product, pitch, or script.`;
+      await tg.send(chatId, helpText);
+      return NextResponse.json({ ok: true });
+    }
+
     // ── /call — works for owner and reps ──────────────────────────────
     if (text === '/call') {
       cs.set(chatId, { step: 'outcome' });

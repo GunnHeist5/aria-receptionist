@@ -275,38 +275,65 @@ async function executeOffboarding(proposalId, rep, message) {
 const ONBOARDING_STEPS = [
   {
     day: 1,
-    message: (rep, intakeLink) =>
-      `Hey ${rep.name.split(' ')[0]}! Here's everything you need to hit the ground running:\n\n` +
-      `🔗 <b>Your intake link</b> (send this to close a deal):\n${intakeLink}\n\n` +
-      `📋 <b>Daily routine:</b>\n` +
-      `• Log your activity every day: /log [dials] [connects] [demos] [closes]\n` +
-      `• Track your stats anytime: /stats\n` +
-      `• Log objections you hit: /objection [what they said]\n` +
-      `• Ask me anything about the product or script — just message here\n\n` +
-      `Start with at least 50 dials tomorrow. Let's go.`,
+    message: (rep, intakeLink) => {
+      const firstName = rep.name.split(' ')[0];
+      return `👋 Day 1 — everything you need to run.\n\n` +
+        `<b>What you're selling:</b>\nAI phone receptionist for local service businesses — HVAC, plumbing, electrical, roofing. It catches missed calls 24/7, qualifies the lead, and texts the owner instantly. They keep their existing number.\n\n` +
+        `<b>Pricing:</b> $500 setup + $297/mo. No contract, cancel anytime. 14-day money-back.\n\n` +
+        `<b>Your commission:</b> $${rep.commission_setup || '?'} per close + ${rep.commission_residual_pct || '?'}% monthly residual (paid as long as they stay).\n\n` +
+        `🔗 <b>Your closer link</b> — send this when you have a yes:\n${intakeLink}\n\n` +
+        `<b>Daily target:</b> 80-100 dials. Expect 10-15 connects. Even 1 demo per day is a good session.\n\n` +
+        `<b>Your commands:</b>\n` +
+        `• <code>/log 80 12 3 1</code> — end-of-day totals (dials/connects/demos/closes)\n` +
+        `• <code>/call</code> — log a connect with outcome + objection (do this after connects, NOT no-answers)\n` +
+        `• <code>/stats</code> — your numbers + unpaid commissions\n` +
+        `• <code>/objection [what they said]</code> — log a new objection\n` +
+        `• <code>/help</code> — show all commands\n\n` +
+        `Ask me anything — product questions, what to say, how to handle an objection. Just text here.\n\nLet's go ${firstName}. 💪`;
+    },
   },
   {
     day: 2,
     message: (rep) =>
-      `Day 2 — here's the script framework.\n\n` +
-      `<b>Opening:</b>\n"Hi [Name], quick question — when someone calls your business after hours and you don't pick up, what happens?"\n\n` +
-      `<b>Transition:</b>\n"We built an AI that catches those calls 24/7, qualifies them, and texts you the lead instantly. Takes 10 minutes to set up. Worth 2 minutes to hear how it works?"\n\n` +
-      `<b>Key points:</b>\n• $297/mo, $500 setup. No contract, cancel anytime.\n• Works for any service business (HVAC, plumbing, electrical, roofing)\n• They keep their existing number — the AI answers missed calls only\n• 14-day money-back guarantee\n\n` +
-      `[PLACEHOLDER — replace with your validated script once you prove it]\n\nGot questions? Just ask me.`,
+      `📋 Day 2 — the pitch.\n\n` +
+      `<b>Opening:</b>\n"Quick question — when someone calls your business and you don't pick up, what happens to that call?"\n\n` +
+      `<i>Let them answer. Most say voicemail or "we usually get them."</i>\n\n` +
+      `<b>Transition:</b>\n"So you're losing leads every week and don't even know it. We built an AI that catches those calls 24/7 — it qualifies the caller and texts you the lead instantly. Takes 10 minutes to set up. Worth 2 minutes to hear how it works?"\n\n` +
+      `<b>Demo points:</b>\n• Works on their existing number — call forwarding on no-answer\n• AI speaks naturally, asks qualifying questions\n• Owner gets a text: name, number, what they need\n• $500 setup, $297/mo, no contract, 14-day guarantee\n\n` +
+      `<b>Close:</b>\n"I'll send you the link right now — takes 5 minutes and your AI is live within 24 hours. Sound good?"\n\n` +
+      `[PLACEHOLDER — update after your first 20 calls prove what actually lands]\n\nGot questions about the pitch? Just ask. Tomorrow: objections.`,
   },
   {
     day: 3,
     message: (rep) =>
-      `Day 3 — objection handling basics.\n\n` +
-      `<b>"We already have voicemail"</b>\n→ "Voicemail loses leads — 80% of callers don't leave a message. This texts you the lead and asks the caller qualifying questions. Totally different."\n\n` +
-      `<b>"We're too busy / not interested"</b>\n→ "Totally get it. Quick question — what do you do with the calls you miss at 9pm or on weekends? That's exactly the gap this fills."\n\n` +
-      `<b>"How much does it cost?"</b>\n→ "One client you would've lost covers the first month. It's $297/mo. Want me to send you the breakdown?"\n\n` +
-      `[PLACEHOLDER — replace after you prove real objections]\n\nLog any new objections with /objection and I'll update this as we learn.`,
+      `🛡️ Day 3 — objection playbook.\n\n` +
+      `<b>"Already have an answering service"</b>\n→ "That handles calls you pick up. This handles the ones you miss — after hours, weekends, when you're on a job. Totally different gap."\n\n` +
+      `<b>"How much does it cost?"</b>\n→ "One job you would've missed covers the first month. $297/mo, no contract. I'll send the link — you can see exactly how it works before committing."\n\n` +
+      `<b>"Need to think / talk to my partner"</b>\n→ "Totally fair. What's the main thing you'd want to think through? I can answer it now and save you the back-and-forth."\n\n` +
+      `<b>"Don't trust AI"</b>\n→ "Skepticism makes sense. This isn't ChatGPT — it does one thing: answer missed calls and capture the lead. You can literally call the number right now and hear it yourself."\n\n` +
+      `<b>"Too busy right now"</b>\n→ "That's exactly why it makes sense — you're too busy to answer every call. 5 minutes to set up, runs itself. Want me to send the link so you can look when you have a sec?"\n\n` +
+      `[PLACEHOLDER — log real objections with /objection as you hit them. I'll analyze patterns and push updates.]\n\n` +
+      `Every objection you log with /objection makes the script better for everyone.`,
   },
   {
     day: 7,
     message: (rep) =>
-      `One week in — how's it going ${rep.name.split(' ')[0]}?\n\nCheck your numbers with /stats. If your connect rate is under 5%, try calling between 8-9am or 4-6pm local time for the business.\n\nWhat's the toughest objection you've been hitting? Log it with /objection and I'll work on a fix.`,
+      `📊 One week in — let's debrief.\n\n` +
+      `Check your numbers with /stats.\n\n` +
+      `<b>Week 1 benchmarks:</b>\n` +
+      `• 400+ dials total\n• Connect rate &gt;10% = good hours\n• 5+ demos given = pipeline building\n\n` +
+      `<b>If connect rate is low (&lt;8%):</b>\nTry 8-9am or 4-6pm local time — owners are between jobs then.\n\n` +
+      `<b>If connects but no demos:</b>\nYour opener might not be landing. Tell me the exact response you keep getting and I'll help you rework it.\n\n` +
+      `<b>If demos but no closes:</b>\nLog what's happening with /call — the objection breakdown will show us where deals are dying.\n\n` +
+      `What's the biggest thing you're running into? Just ask.`,
+  },
+  {
+    day: 14,
+    message: (rep) =>
+      `Two weeks in. If you haven't closed yet — that's normal for week 2. Pipeline takes time.\n\n` +
+      `The reps who close are the ones doing the volume. Run /stats and tell me your dial count. If it's under 600 for the two weeks, that's the lever to pull first — not the script.\n\n` +
+      `If you're hitting volume and still not closing, text me the objection you keep getting. We'll fix it.\n\n` +
+      `What do your numbers look like?`,
   },
 ];
 
