@@ -96,16 +96,21 @@ async function notifyOwnerClientLive(pool, clientId) {
   if (!c) return;
 
   const number = c.provisioned_number ?? '(number not found)';
+  const serviceArea  = (typeof c.service_area === 'object' && c.service_area) || {};
+  const areaCode     = serviceArea.areaCode || String(c.phone || '').replace(/\D/g, '').slice(-10, -7) || '???';
+
   const msg =
-    `✅ <b>Client Live: ${c.business_name}</b>\n` +
-    `📞 AI number: <code>${number}</code>\n` +
-    `📍 ${c.city}, ${c.state}\n` +
-    `↪️ Forwards to: ${c.forward_to_number}\n\n` +
-    `The AI just called them from ${number} — they heard it live and have the number on caller ID.\n\n` +
-    `<b>Follow-up message to send:</b>\n` +
-    `<i>Hey! The AI receptionist that just called you is your new system — save that number. ` +
-    `Set it as your call-forward-on-no-answer and every missed call goes to the AI automatically. ` +
-    `Any questions, just reply here.</i>`;
+    `🆕 <b>New Client: ${c.business_name}</b>\n` +
+    `📍 ${c.city}, ${c.state}\n\n` +
+    `<b>Trillet setup:</b>\n` +
+    `• Area code: <code>${areaCode}</code>\n` +
+    `• Forward calls to: <code>${c.forward_to_number}</code>\n` +
+    `• Tone: ${c.tone || 'professional'}\n` +
+    `• After hours: ${c.after_hours_behavior || 'voicemail'}\n\n` +
+    `<b>Steps:</b>\n` +
+    `1. Buy a number in area code ${areaCode} in Trillet dashboard\n` +
+    `2. Attach it to the ${c.business_name} agent\n` +
+    `3. Tell client their new number and to set call-forward-on-no-answer`;
 
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method:  'POST',
