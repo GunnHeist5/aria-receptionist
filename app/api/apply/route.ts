@@ -11,17 +11,23 @@ export async function POST(req: NextRequest) {
 
   const pool = getPool();
 
-  const existing = await pool.query(`SELECT id FROM candidates WHERE email = $1 LIMIT 1`, [email]);
-  if (existing.rows.length > 0) {
-    return NextResponse.json({ error: 'Application already received for this email' }, { status: 409 });
-  }
+  try {
+    const existing = await pool.query(`SELECT id FROM candidates WHERE email = $1 LIMIT 1`, [email]);
+    if (existing.rows.length > 0) {
+      // Treat duplicate as success — applicant already in system (often a retry after network timeout)
+      return NextResponse.json({ ok: true, already_exists: true });
+    }
 
-  await pool.query(
-    `INSERT INTO candidates (name, email, phone, application_text, submission_url, utm_source, status)
-     VALUES ($1, $2, $3, $4, $5, $6, 'applied')`,
-    [name, email.toLowerCase().trim(), phone ?? null, application_text ?? null,
-     submission_url ?? null, utm_source ?? null]
-  );
+    await pool.query(
+      `INSERT INTO candidates (name, email, phone, application_text, submission_url, utm_source, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'applied')`,
+      [name, email.toLowerCase().trim(), phone ?? null, application_text ?? null,
+       submission_url ?? null, utm_source ?? null]
+    );
+  } catch (err) {
+    console.error('[apply] DB error:', err);
+    return NextResponse.json({ error: 'Server error — please email your application to justin.yi0410@gmail.com' }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }

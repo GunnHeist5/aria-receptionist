@@ -20,11 +20,13 @@ export default function ApplyForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, utm_source: 'upwork' }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Submission failed');
+      let data: { ok?: boolean; error?: string; already_exists?: boolean } = {};
+      try { data = await res.json(); } catch { /* non-JSON response */ }
+      if (!res.ok) throw new Error(data.error ?? `Server error (${res.status}) — please email justin.yi0410@gmail.com directly`);
       setStatus('done');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const msg = err instanceof Error ? err.message : 'Network error — check your connection and try again, or email justin.yi0410@gmail.com';
+      setError(msg);
       setStatus('error');
     }
   }
@@ -103,7 +105,17 @@ export default function ApplyForm() {
         />
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && (
+        <div className="text-sm space-y-1">
+          <p className="text-red-400">{error}</p>
+          <p className="text-zinc-500">
+            Or email directly:{' '}
+            <a href="mailto:justin.yi0410@gmail.com?subject=Sales Rep Application" className="text-[#c9a84c] underline">
+              justin.yi0410@gmail.com
+            </a>
+          </p>
+        </div>
+      )}
 
       <button
         type="submit"
