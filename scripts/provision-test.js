@@ -54,15 +54,15 @@ async function main() {
       'won', 'active',
       $1, 'plumbing', '+12155550100', $2,
       'Philadelphia', 'PA', '19101', 'professional',
-      $3, $4, '[]'::jsonb,
+      $3, $4::jsonb, '[]'::jsonb,
       'voicemail', '{"mon-fri":"08:00-17:00"}'::jsonb, '{"radius_miles":25,"areaCode":"215"}'::jsonb,
-      '{}'::jsonb, 'Emergency call fee: $150. Drain cleaning: $95–150. Water heater install: $800–1200.',
+      '{}'::jsonb, 'Emergency call fee: $150. Drain cleaning: $95-150. Water heater install: $800-1200.',
       85, 'A', 'test'
     ) RETURNING id, business_name
   `, [
     "Murphy's Plumbing",
     forwardTo,
-    JSON.stringify(['Drain cleaning', 'Leak repair', 'Water heaters', 'Emergency plumbing', 'Pipe installation']),
+    ['Drain cleaning', 'Leak repair', 'Water heaters', 'Emergency plumbing', 'Pipe installation'],
     JSON.stringify(['burst pipe', 'flooding', 'gas leak', 'sewage backup', 'no hot water']),
   ]);
 
