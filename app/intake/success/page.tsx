@@ -54,15 +54,16 @@ function SuccessContent() {
             </button>
 
             <p className="text-xs text-[#555] leading-relaxed mb-2">
-              $500 setup + $297/month — card details captured by Stripe, you never see them.
+              $400 setup + $297/month — card details captured by Stripe, you never see them.
             </p>
           </>
         ) : (
           <p className="text-sm text-[#555] leading-relaxed mb-8">
-            The AI receptionist is being configured. A dedicated phone number
-            will be provisioned and the system will be live shortly.
+            Your AI receptionist is being configured. A dedicated local phone number
+            is being provisioned now — this takes about 60 seconds.
             <br /><br />
-            You will receive an SMS confirmation once the number is assigned.
+            You&apos;ll receive your new number from our team shortly. Call it yourself
+            to hear how it sounds, then set it as your call-forward-on-no-answer.
           </p>
         )}
 

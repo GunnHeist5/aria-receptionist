@@ -84,6 +84,36 @@ async function releaseClient(pool, clientId) {
 }
 
 // ---------------------------------------------------------------------------
+// Owner notification — fires after each successful provisioning
+// ---------------------------------------------------------------------------
+
+async function notifyOwnerClientLive(pool, clientId) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const owner = process.env.TELEGRAM_OWNER_CHAT_ID;
+  if (!token || !owner) return;
+
+  const { rows: [c] } = await pool.query('SELECT * FROM clients WHERE id = $1', [clientId]);
+  if (!c) return;
+
+  const number = c.provisioned_number ?? '(number not found)';
+  const msg =
+    `✅ <b>Client Live: ${c.business_name}</b>\n` +
+    `📞 AI number: <code>${number}</code>\n` +
+    `📍 ${c.city}, ${c.state}\n` +
+    `↪️ Forwards to: ${c.forward_to_number}\n\n` +
+    `<b>Send this to the client:</b>\n` +
+    `<i>Hi! Your AI receptionist is live. Your new number is ${number}. ` +
+    `Set it as your call-forward-on-no-answer so any call you miss goes straight to the AI. ` +
+    `Call it yourself now to hear how it sounds!</i>`;
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: owner, text: msg, parse_mode: 'HTML' }),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // One polling cycle
 // ---------------------------------------------------------------------------
 
@@ -100,6 +130,9 @@ async function runCycle(pool, provider) {
   try {
     const { runId } = await runOnboarding(client.id, { db: pool, provider });
     process.stdout.write(`[worker] ✓ live   ${tag}  run=${runId}\n`);
+    await notifyOwnerClientLive(pool, client.id).catch(e =>
+      process.stderr.write(`[worker] notify failed: ${e.message}\n`)
+    );
   } catch (err) {
     process.stdout.write(`[worker] ✗ failed ${tag}: ${err.message}\n`);
     // Reset to 'won' so the next cycle retries from the pipeline checkpoint
