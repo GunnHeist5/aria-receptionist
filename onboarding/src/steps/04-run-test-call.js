@@ -17,33 +17,39 @@ const STEP_KEY = 'run_test_call';
  * @returns {Promise<import('../pipeline').StepResult>}
  */
 async function runTestCall({ client, provider }) {
-  const testNumber = process.env.TEST_CALL_NUMBER;
+  // Prefer explicit override, fall back to the client's own forward-to number.
+  // forward_to_number is required on the intake form, so this runs for every client
+  // automatically — the AI calls them from their new number to introduce itself.
+  const callTo = process.env.TEST_CALL_NUMBER || client.forward_to_number;
 
-  if (!testNumber) {
+  if (!callTo) {
     return {
-      stepKey:    STEP_KEY,
+      stepKey:       STEP_KEY,
       clientUpdates: {},
-      eventPayload:  {},   // overridden by pipeline when skipped=true
-      skipped:    true,
-      skipReason: 'TEST_CALL_NUMBER not configured — test call skipped',
+      eventPayload:  {},
+      skipped:       true,
+      skipReason:    'No call target — TEST_CALL_NUMBER not set and forward_to_number missing',
     };
   }
 
-  const { success, callId, latencyMs, raw } = await provider.runTestCall(
+  // Brief pause so Trillet fully propagates the number-to-agent link before the call.
+  await new Promise(r => setTimeout(r, 5_000));
+
+  const { success, callId, raw } = await provider.runTestCall(
     client.voice_provider_account_id,
-    testNumber
+    callTo
   );
 
   return {
-    stepKey: STEP_KEY,
-    clientUpdates: {},   // no client field changes; test is diagnostic only
+    stepKey:       STEP_KEY,
+    clientUpdates: {},
     eventPayload: {
-      step:       STEP_KEY,
-      testNumber,
+      step:    STEP_KEY,
+      callTo,
       callId,
-      latencyMs,
       success,
-      _raw:       raw,
+      isClientIntroCall: !process.env.TEST_CALL_NUMBER,
+      _raw:    raw,
     },
   };
 }

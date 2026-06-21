@@ -101,10 +101,11 @@ async function notifyOwnerClientLive(pool, clientId) {
     `📞 AI number: <code>${number}</code>\n` +
     `📍 ${c.city}, ${c.state}\n` +
     `↪️ Forwards to: ${c.forward_to_number}\n\n` +
-    `<b>Send this to the client:</b>\n` +
-    `<i>Hi! Your AI receptionist is live. Your new number is ${number}. ` +
-    `Set it as your call-forward-on-no-answer so any call you miss goes straight to the AI. ` +
-    `Call it yourself now to hear how it sounds!</i>`;
+    `The AI just called them from ${number} — they heard it live and have the number on caller ID.\n\n` +
+    `<b>Follow-up message to send:</b>\n` +
+    `<i>Hey! The AI receptionist that just called you is your new system — save that number. ` +
+    `Set it as your call-forward-on-no-answer and every missed call goes to the AI automatically. ` +
+    `Any questions, just reply here.</i>`;
 
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method:  'POST',
