@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
   await tgSend(token, chatId,
     `✅ <b>You're in, ${firstName}.</b> Contract signed — let's get you up and running right now.\n\n` +
     `<b>What you're selling:</b>\nAI phone receptionist for local service businesses (HVAC, plumbing, electrical, roofing). It catches missed calls 24/7, qualifies the lead, and texts the owner instantly. They keep their existing number.\n\n` +
-    `<b>Pricing:</b> $500 setup + $297/mo. No contract, cancel anytime. 14-day money-back.\n\n` +
-    `<b>Your commission:</b> $${rep.commission_setup || '?'} per close + ${rep.commission_residual_pct || '?'}% monthly residual — paid every month they stay.\n\n` +
+    `<b>Client pricing:</b> $400 setup + $297/mo. No contract, cancel anytime. 14-day money-back.\n\n` +
+    `<b>Your pay:</b>\n• $100/mo base (paid regardless)\n• $${rep.commission_setup || '400'} per close\n• ${rep.commission_residual_pct || '10'}% monthly residual per client (18-month cap)\n\n` +
     `🔗 <b>Your closer link</b> (send this when someone says yes):\n${intakeLink}\n\n` +
     `<b>Daily target:</b> 80-100 dials. Expect 10-15 connects. 1 demo per day = good session.\n\nNext message: the pitch. 👇`
   );
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     `<b>Opening:</b>\n"Quick question — when someone calls your business and you don't pick up, what happens to that call?"\n\n` +
     `<i>Let them answer. Most say voicemail or "we usually get them."</i>\n\n` +
     `<b>Transition:</b>\n"So you're losing leads every week without knowing it. We built an AI that catches those calls 24/7 — qualifies the caller and texts you the lead instantly. Takes 10 minutes to set up. Worth 2 minutes to hear how it works?"\n\n` +
-    `<b>Demo points:</b>\n• Works on their existing number (call forwarding on no-answer)\n• AI speaks naturally, asks qualifying questions\n• Owner gets a text: name, number, and what they need\n• $500 setup, $297/mo, no contract, 14-day guarantee\n\n` +
+    `<b>Demo points:</b>\n• Works on their existing number (call forwarding on no-answer)\n• AI speaks naturally, asks qualifying questions\n• Owner gets a text: name, number, and what they need\n• $400 setup, $297/mo, no contract, 14-day guarantee\n\n` +
     `<b>Close:</b>\n"I'll send you the link right now — takes 5 minutes and your AI is live within 24 hours. Sound good?"\n\n` +
     `[PLACEHOLDER — update after your first 20 calls]\n\nNext message: objection playbook. 👇`
   );

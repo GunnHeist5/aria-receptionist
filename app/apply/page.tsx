@@ -12,16 +12,16 @@ export default function ApplyPage() {
           <p className="text-[#c9a84c] text-sm font-medium tracking-widest uppercase">Reachwell · Remote · 1099</p>
           <h1 className="text-3xl sm:text-4xl font-bold">Commission-Based Sales Rep</h1>
           <p className="text-zinc-400 text-lg leading-relaxed max-w-lg mx-auto">
-            Cold call local service businesses. Sell AI phone receptionists. Keep a cut of every client you bring in — forever.
+            Cold call local service businesses. Sell AI phone receptionists. $100/mo base + commission on every client you bring in.
           </p>
         </div>
 
         {/* Earnings potential */}
         <div className="mb-10 grid grid-cols-3 gap-3">
           {[
-            { value: '$500', label: 'Setup fee per close' },
-            { value: '10%', label: 'Monthly residual MRR' },
-            { value: '$297', label: 'Client monthly price' },
+            { value: '$400', label: 'Per close (setup)' },
+            { value: '$100/mo', label: 'Base pay' },
+            { value: '10%', label: 'Residual MRR (18-mo cap)' },
           ].map(item => (
             <div key={item.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-center">
               <p className="text-[#c9a84c] font-bold text-xl">{item.value}</p>
@@ -35,17 +35,22 @@ export default function ApplyPage() {
           <p className="text-zinc-400 text-sm font-medium mb-3 uppercase tracking-wide">What 5 closes looks like</p>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-zinc-400">5 × $500 setup commissions</span>
-              <span className="text-white font-semibold">$2,500</span>
+              <span className="text-zinc-400">5 × $400 setup commissions</span>
+              <span className="text-white font-semibold">$2,000</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-400">$100/mo base pay</span>
+              <span className="text-white font-semibold">$100/mo</span>
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-400">5 clients × $297/mo × 10% residual</span>
-              <span className="text-white font-semibold">$148/mo recurring</span>
+              <span className="text-white font-semibold">$148/mo</span>
             </div>
             <div className="border-t border-zinc-800 pt-2 mt-2 flex justify-between">
               <span className="text-zinc-400">After 6 months (if all stay)</span>
-              <span className="text-[#c9a84c] font-bold">$3,388 total</span>
+              <span className="text-[#c9a84c] font-bold">$3,488 total</span>
             </div>
+            <p className="text-zinc-600 text-xs pt-1">Residual capped at 18 months per client.</p>
           </div>
         </div>
 
