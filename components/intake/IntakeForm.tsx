@@ -4,6 +4,21 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 
+const CARRIER_OPTIONS = [
+  { value: 'verizon',      label: 'Verizon Wireless' },
+  { value: 'att',          label: 'AT&T Wireless' },
+  { value: 'tmobile',      label: 'T-Mobile / Sprint' },
+  { value: 'uscellular',   label: 'US Cellular' },
+  { value: 'comcast',      label: 'Comcast / Xfinity Business' },
+  { value: 'spectrum',     label: 'Spectrum Business' },
+  { value: 'cox',          label: 'Cox Business' },
+  { value: 'frontier',     label: 'Frontier' },
+  { value: 'ringcentral',  label: 'RingCentral' },
+  { value: 'google_voice', label: 'Google Voice' },
+  { value: 'vonage',       label: 'Vonage Business' },
+  { value: 'other',        label: 'Other / Landline / VoIP' },
+];
+
 const SERVICE_GROUPS = [
   {
     label: 'Plumbing',
@@ -26,6 +41,7 @@ const DEFAULTS: F = {
   businessHoursPreset: 'mon-fri-8-5', services: '',
   doNotSay: '', escalationKeywords: 'burst pipe, flooding, gas leak, no hot water',
   afterHoursBehavior: 'voicemail', alertPhone: '',
+  carrier: '', carrierName: '',
 };
 
 const label = 'block text-xs text-[#9a9a9a] uppercase tracking-widest mb-1.5';
@@ -136,6 +152,20 @@ export default function IntakeForm({ refSlug }: { refSlug?: string | null }) {
             <label className={label}>Alert SMS (for notifications)</label>
             <input className={field} value={form.alertPhone} onChange={set('alertPhone')} placeholder="+15125550199" />
           </div>
+          <div>
+            <label className={label}>Phone Carrier</label>
+            <select className={select} value={form.carrier} onChange={set('carrier')}>
+              <option value="">— select carrier —</option>
+              {CARRIER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <p className="text-xs text-[#555] mt-1">Used to generate exact forwarding instructions for the client.</p>
+          </div>
+          {form.carrier === 'other' && (
+            <div>
+              <label className={label}>Carrier Name</label>
+              <input className={field} value={form.carrierName} onChange={set('carrierName')} placeholder="e.g. Zoom Phone, Nextiva, Grasshopper" />
+            </div>
+          )}
         </div>
       </section>
 

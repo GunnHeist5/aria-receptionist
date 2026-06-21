@@ -43,6 +43,7 @@ if (!process.env.DATABASE_URL) {
 const { Pool }             = require('../ai-receptionist-db/node_modules/pg');
 const { runOnboarding }   = require('../onboarding/src/index');
 const { createVoiceProvider } = require('../voice-provider/src/index');
+const { getSmsGuide }     = require('../sales-manager/lib/carrier-instructions');
 
 const POLL_MS  = parseInt(process.env.POLL_INTERVAL_MS || '30000', 10);
 const RUN_ONCE = process.argv.includes('--once');
@@ -99,18 +100,24 @@ async function notifyOwnerClientLive(pool, clientId) {
   const serviceArea  = (typeof c.service_area === 'object' && c.service_area) || {};
   const areaCode     = serviceArea.areaCode || String(c.phone || '').replace(/\D/g, '').slice(-10, -7) || '???';
 
+  const smsCopy = getSmsGuide(c.carrier || 'other', '[INSERT AI NUMBER HERE]', c.business_name);
+
   const msg =
     `🆕 <b>New Client: ${c.business_name}</b>\n` +
     `📍 ${c.city}, ${c.state}\n\n` +
     `<b>Trillet setup:</b>\n` +
     `• Area code: <code>${areaCode}</code>\n` +
     `• Forward calls to: <code>${c.forward_to_number}</code>\n` +
+    `• Carrier: ${c.carrier_name || c.carrier || 'unknown'}\n` +
     `• Tone: ${c.tone || 'professional'}\n` +
     `• After hours: ${c.after_hours_behavior || 'voicemail'}\n\n` +
     `<b>Steps:</b>\n` +
     `1. Buy a number in area code ${areaCode} in Trillet dashboard\n` +
     `2. Attach it to the ${c.business_name} agent\n` +
-    `3. Tell client their new number and to set call-forward-on-no-answer`;
+    `3. Replace [INSERT AI NUMBER HERE] below and text the client\n` +
+    `4. Reply /activate ${c.business_name.split(' ')[0].toLowerCase()} once they confirm forwarding\n\n` +
+    `<b>📱 Client SMS (copy-paste, fill in number first):</b>\n` +
+    `<pre>${smsCopy.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
 
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method:  'POST',

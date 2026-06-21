@@ -7,7 +7,7 @@ const MAX_HIST   = 20;
 const history    = [];
 
 async function getContext(pool) {
-  const [reps, pipeline, mrrRow, owedRow] = await Promise.all([
+  const [reps, pipeline, mrrRow, owedRow, unconfirmedRow] = await Promise.all([
     pool.query(`
       SELECT c.name,
         (SELECT health_status FROM rep_metrics WHERE contractor_id=c.id ORDER BY computed_at DESC LIMIT 1) AS health,
@@ -18,6 +18,7 @@ async function getContext(pool) {
     pool.query(`SELECT status, COUNT(*) AS n FROM candidates GROUP BY status`),
     pool.query(`SELECT COALESCE(SUM(mrr),0) AS total FROM clients WHERE billing_status='active'`),
     pool.query(`SELECT COALESCE(SUM(amount),0) AS owed FROM commissions WHERE status='accrued'`),
+    pool.query(`SELECT COUNT(*) AS n FROM clients WHERE status='live' AND forwarding_confirmed=false`),
   ]);
 
   const repLines = reps.rows.length
@@ -28,6 +29,8 @@ async function getContext(pool) {
     ? pipeline.rows.map(r => `  ${r.status}: ${r.n}`).join('\n')
     : '  (none)';
 
+  const unconfirmed = Number(unconfirmedRow.rows[0]?.n ?? 0);
+
   return `REACHWELL — LIVE SNAPSHOT
 Active reps:
 ${repLines}
@@ -36,7 +39,8 @@ Candidate pipeline:
 ${pipelineLines}
 
 MRR: $${Number(mrrRow.rows[0]?.total ?? 0).toFixed(0)}/mo
-Commissions owed to reps: $${Number(owedRow.rows[0]?.owed ?? 0).toFixed(2)}`;
+Commissions owed to reps: $${Number(owedRow.rows[0]?.owed ?? 0).toFixed(2)}
+Live clients awaiting forwarding confirmation: ${unconfirmed}`;
 }
 
 async function chat(pool, userMessage) {

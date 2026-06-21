@@ -241,6 +241,8 @@ export async function POST(req: NextRequest) {
           `<code>/insights</code> — objection breakdown + demo close rates\n` +
           `<code>/reps</code> — active rep health status\n` +
           `<code>/candidates</code> — candidate pipeline\n` +
+          `<code>/unactivated</code> — live clients still awaiting forwarding confirmation\n` +
+          `<code>/activate [name]</code> — mark client forwarding confirmed\n` +
           `<code>/log 80 12 3 1</code> — daily totals\n` +
           `<code>/stats</code> — your numbers\n` +
           `<code>/objection [text]</code> — log an objection\n\n` +
@@ -294,6 +296,53 @@ export async function POST(req: NextRequest) {
       if (text === '/candidates') {
         const { rows } = await pool.query(`SELECT status, COUNT(*) AS n FROM candidates GROUP BY status ORDER BY n DESC`);
         await tg.sendToOwner(`<b>Candidate Pipeline</b>\n\n${rows.map((r: any) => `${r.status}: ${r.n}`).join('\n') || 'empty'}`);
+        return NextResponse.json({ ok: true });
+      }
+
+      if (text === '/unactivated') {
+        const { rows } = await pool.query(`
+          SELECT business_name, city, state, forward_to_number, carrier,
+                 EXTRACT(DAY FROM NOW() - updated_at)::int AS days_live
+          FROM clients
+          WHERE status = 'live' AND forwarding_confirmed = false
+          ORDER BY updated_at ASC
+        `);
+        if (!rows.length) {
+          await tg.sendToOwner('✅ All live clients have confirmed forwarding.');
+        } else {
+          const lines = rows.map((r: any) =>
+            `• <b>${r.business_name}</b> (${r.city}, ${r.state}) — day ${r.days_live ?? 0}\n  ${r.forward_to_number} · ${r.carrier || 'carrier unknown'}`
+          ).join('\n');
+          await tg.sendToOwner(`📋 <b>Live clients awaiting forwarding confirmation (${rows.length})</b>\n\n${lines}\n\nReply /activate [name] once they text back.`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      if (text.startsWith('/activate ')) {
+        const snippet = text.replace(/^\/activate\s+/i, '').trim().toLowerCase();
+        if (!snippet) {
+          await tg.sendToOwner('Usage: /activate [client name or phone]');
+          return NextResponse.json({ ok: true });
+        }
+        // Fuzzy-match: name ILIKE or phone contains snippet
+        const { rows } = await pool.query(`
+          SELECT id, business_name FROM clients
+          WHERE status = 'live'
+            AND forwarding_confirmed = false
+            AND (LOWER(business_name) LIKE $1 OR phone LIKE $2)
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `, [`%${snippet}%`, `%${snippet}%`]);
+        if (!rows.length) {
+          await tg.sendToOwner(`No unconfirmed live client matched "${snippet}". Try /unactivated to see the list.`);
+        } else {
+          const c = rows[0];
+          await pool.query(
+            `UPDATE clients SET forwarding_confirmed=true, forwarding_confirmed_at=NOW(), updated_at=NOW() WHERE id=$1`,
+            [c.id]
+          );
+          await tg.sendToOwner(`✅ <b>${c.business_name}</b> marked as forwarding confirmed. They're fully live!`);
+        }
         return NextResponse.json({ ok: true });
       }
 
