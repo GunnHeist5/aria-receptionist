@@ -5,18 +5,19 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 
 const CARRIER_OPTIONS = [
-  { value: 'verizon',      label: 'Verizon Wireless' },
-  { value: 'att',          label: 'AT&T Wireless' },
-  { value: 'tmobile',      label: 'T-Mobile / Sprint' },
-  { value: 'uscellular',   label: 'US Cellular' },
-  { value: 'comcast',      label: 'Comcast / Xfinity Business' },
-  { value: 'spectrum',     label: 'Spectrum Business' },
-  { value: 'cox',          label: 'Cox Business' },
-  { value: 'frontier',     label: 'Frontier' },
-  { value: 'ringcentral',  label: 'RingCentral' },
-  { value: 'google_voice', label: 'Google Voice' },
-  { value: 'vonage',       label: 'Vonage Business' },
-  { value: 'other',        label: 'Other / Landline / VoIP' },
+  { value: 'verizon',          label: 'Verizon Wireless' },
+  { value: 'att',              label: 'AT&T Wireless' },
+  { value: 'tmobile',          label: 'T-Mobile / Sprint' },
+  { value: 'uscellular',       label: 'US Cellular' },
+  { value: 'xfinity',          label: 'Xfinity Voice (Residential)' },
+  { value: 'comcast_business', label: 'Comcast Business (VoiceEdge)' },
+  { value: 'spectrum',         label: 'Spectrum Business' },
+  { value: 'cox',              label: 'Cox Business' },
+  { value: 'frontier',         label: 'Frontier' },
+  { value: 'ringcentral',      label: 'RingCentral' },
+  { value: 'google_voice',     label: 'Google Voice' },
+  { value: 'vonage',           label: 'Vonage Business' },
+  { value: 'other',            label: 'Other / Landline / VoIP' },
 ];
 
 const SERVICE_GROUPS = [
