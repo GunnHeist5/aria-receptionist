@@ -4,6 +4,31 @@ import { createCheckoutSession } from '@/lib/stripe';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
 
+// Keywords for detecting trades from free-text service selections.
+// Err toward HVAC detection for ambiguous custom services; plumbing is the fallback default.
+const HVAC_KW = [
+  'ac', 'a/c', 'air condition', 'air quality', 'air purifier', 'air handler',
+  'hvac', 'heat pump', 'heating', 'furnace', 'boiler',
+  'duct', 'ductwork', 'thermostat', 'refrigerant', 'freon',
+  'cooling', 'mini-split', 'mini split', 'blower motor', 'condenser',
+  'evaporator', 'compressor', 'variable speed', 'zoning system',
+];
+const PLUMBING_KW = [
+  'plumb', 'drain', 'pipe', 'sewer', 'leak', 'leaking',
+  'water heater', 'tankless', 'hydro', 'camera inspection',
+  'fixture', 'faucet', 'toilet', 'garbage disposal', 'backflow',
+  'water line', 'gas line', 'repiping',
+];
+
+function deriveBusinessType(services: string[]): string {
+  const lower     = services.map(s => s.toLowerCase());
+  const hasHvac   = lower.some(s => HVAC_KW.some(k => s.includes(k)));
+  const hasPlumb  = lower.some(s => PLUMBING_KW.some(k => s.includes(k)));
+  if (hasHvac && hasPlumb) return 'combined';
+  if (hasHvac)             return 'hvac';
+  return 'plumbing'; // primary niche; safe default for ambiguous/empty services
+}
+
 const HOURS_MAP: Record<string, Record<string, string>> = {
   'mon-fri-8-5':  { 'mon-fri': '08:00-17:00' },
   'mon-fri-7-6':  { 'mon-fri': '07:00-18:00' },
@@ -34,6 +59,7 @@ export async function POST(req: NextRequest) {
 
   const businessHours  = HOURS_MAP[businessHoursPreset] ?? HOURS_MAP['mon-fri-8-5'];
   const servicesArr    = (services ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  const businessType   = deriveBusinessType(servicesArr);
   const doNotSayArr    = (doNotSay ?? '').split(',').map(s => s.trim()).filter(Boolean);
   const escalationArr  = (escalationKeywords ?? '').split(',').map(s => s.trim()).filter(Boolean);
   const alertDest      = alertPhone?.trim() ? { sms: [alertPhone.trim()] } : {};
@@ -62,7 +88,7 @@ export async function POST(req: NextRequest) {
          after_hours_behavior, alert_destination, pricing_notes,
          contractor_id, carrier, carrier_name
        ) VALUES (
-         'won', $1, 'plumbing', $2, $3,
+         'won', $1, $21, $2, $3,
          $4, $5, $6, $7, 85, 'A', 'intake_form',
          $8, $9, $10::jsonb, $11,
          $12::jsonb, $13::jsonb, $14::jsonb,
@@ -85,6 +111,7 @@ export async function POST(req: NextRequest) {
         contractorId,
         carrier?.trim() || null,
         carrierName?.trim() || null,
+        businessType,                         // $21
       ]
     );
 

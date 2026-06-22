@@ -1,17 +1,19 @@
 'use strict';
 
 const { buildPlumbingV1 } = require('../content-packs/plumbing-v1');
+const { buildHvacV1 }     = require('../content-packs/hvac-v1');
+const { buildCombinedV1 } = require('../content-packs/combined-v1');
 
 const STEP_KEY = 'apply_content_pack';
 
 /**
  * Content pack registry — maps business_type → pack builder function.
- * Add new business types here as the platform expands.
  * Each builder: (client) → ContentPack
  */
 const PACK_BUILDERS = {
   plumbing: buildPlumbingV1,
-  // hvac: buildHvacV1,     ← add when hvac vertical launches
+  hvac:     buildHvacV1,
+  combined: buildCombinedV1,
 };
 
 /**
