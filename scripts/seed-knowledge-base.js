@@ -19,7 +19,7 @@ const ARTICLES = [
 
 THE CORE PROBLEM: Small home-services businesses (plumbers, HVAC, electricians) miss 20–40% of their calls — they're on a job, it's after hours, they're already on the phone. Most people who hit voicemail just hang up and call the next company. Every missed call is a lost job, often worth hundreds or thousands of dollars.
 
-PRICING: $400 setup + $297/mo. No long-term contract, cancel anytime, 14-day money-back guarantee.`,
+PRICING: $500 setup + $297/mo. No long-term contract, cancel anytime, 14-day money-back guarantee.`,
   },
 
   {
@@ -119,7 +119,7 @@ STAGE 5 — THE REACTION
 Pause. Let them react.
 
 STAGE 6 — THE CLOSE (assume the sale, state price, then STOP)
-"So here's how it works — I get this running on your line this week. It's $400 to set up, then $297 a month. One job it catches usually covers a couple months. Want me to get you set up?"
+"So here's how it works — I get this running on your line this week. It's $500 to set up, then $297 a month. One job it catches usually covers a couple months. Want me to get you set up?"
 Say the price, then STOP talking. Whoever speaks first after the price loses.
 
 STAGE 7 — THE PAYMENT (close on the call)
@@ -207,7 +207,7 @@ For a hard skeptic: set it up, let them test their own bot, with payment committ
 • Use the script. Get them to hear the demo — that's what closes.
 • Keep them on the line through the demo AND the payment. Never "call me back."
 • Don't promise capabilities beyond what's listed (no calendar booking, no CRM — not built yet).
-• Don't quote prices beyond $400 setup + $297/mo.
+• Don't quote prices beyond $500 setup + $297/mo.
 • Follow calling laws — respect do-not-call requests and calling hours.
 • Log every call outcome with /call (outcome, objection, demo method, notes).
 • For "interested" that don't close, mark them and follow up.

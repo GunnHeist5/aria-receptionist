@@ -32,7 +32,7 @@ export async function sendOnboardingBurst(rep: {
   await tgSend(token, chatId,
     `✅ <b>You're in, ${firstName}.</b> Contract signed — let's get you up and running right now.\n\n` +
     `<b>What you're selling:</b>\nAI phone receptionist for local service businesses (HVAC, plumbing, electrical, roofing). It catches missed calls 24/7, qualifies the lead, and texts the owner instantly. They keep their existing number.\n\n` +
-    `<b>Client pricing:</b> $400 setup + $297/mo. No contract, cancel anytime. 14-day money-back.\n\n` +
+    `<b>Client pricing:</b> $500 setup + $297/mo. No contract, cancel anytime. 14-day money-back.\n\n` +
     `<b>Your pay:</b>\n• $100/mo base (paid regardless)\n• $${rep.commission_setup ?? 400} per close\n• ${rep.commission_residual_pct ?? 10}% monthly residual per client (18-month cap)\n\n` +
     `🔗 <b>Your closer link</b> (send this when someone says yes):\n${intakeLink}\n\n` +
     `<b>Daily target:</b> 80-100 dials. Expect 10-15 connects. 1 demo per day = good session.\n\nNext message: the pitch. 👇`
@@ -57,7 +57,7 @@ export async function sendOnboardingBurst(rep: {
     `"Pretty real, right? Your customers wouldn't know that's not a person."\n` +
     `<i>Pause. Let them react.</i>\n\n` +
     `<b>6 — Close (state price, then STOP)</b>\n` +
-    `"Here's how it works — $400 to set up, $297 a month. One job it catches covers a couple months. Want me to get you set up?"\n` +
+    `"Here's how it works — $500 to set up, $297 a month. One job it catches covers a couple months. Want me to get you set up?"\n` +
     `<b>Say the price, then stop. Whoever speaks first loses.</b>\n\n` +
     `<b>7 — Payment (close on the call)</b>\n` +
     `"Great — sending you a payment link right now. Fill it out while we're on the line?"\n` +

@@ -54,7 +54,7 @@ function SuccessContent() {
             </button>
 
             <p className="text-xs text-[#555] leading-relaxed mb-2">
-              $400 setup + $297/month — card details captured by Stripe, you never see them.
+              $500 setup + $297/month — card details captured by Stripe, you never see them.
             </p>
           </>
         ) : (
