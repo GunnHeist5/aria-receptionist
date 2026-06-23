@@ -94,12 +94,14 @@ async function runMonitoring() {
       for (const [days, label] of [[7, 'week'], [30, 'month']]) {
         const { rows: [m] } = await pool.query(`
           SELECT
-            COALESCE(SUM(dials), 0)    AS total_dials,
-            COALESCE(SUM(connects), 0) AS total_connects,
-            COALESCE(SUM(demos), 0)    AS total_demos,
-            COALESCE(SUM(closes), 0)   AS total_closes
-          FROM rep_activity
-          WHERE contractor_id = $1 AND date >= CURRENT_DATE - $2
+            COALESCE(SUM(a.dials), 0)    AS total_dials,
+            COALESCE(SUM(a.connects), 0) AS total_connects,
+            COALESCE(SUM(a.demos), 0)    AS total_demos,
+            (SELECT COUNT(*) FROM commissions
+             WHERE contractor_id = $1 AND type = 'setup'
+               AND created_at >= CURRENT_DATE - $2) AS total_closes
+          FROM rep_activity a
+          WHERE a.contractor_id = $1 AND a.date >= CURRENT_DATE - $2
         `, [rep.id, days]);
 
         const connectRate = m.total_dials   > 0 ? (m.total_connects / m.total_dials) * 100 : null;
@@ -230,9 +232,15 @@ async function runOffboarding() {
       if (daysSilent < flags.INACTIVITY_OFFBOARD_DAYS) continue;
 
       const { rows: activity } = await pool.query(`
-        SELECT DATE_TRUNC('week', date)::date AS week_start,
-               SUM(dials) AS dials, SUM(closes) AS closes
-        FROM rep_activity WHERE contractor_id=$1 AND date >= NOW() - INTERVAL '60 days'
+        SELECT DATE_TRUNC('week', a.date)::date AS week_start,
+               SUM(a.dials) AS dials,
+               COUNT(c.id)  AS closes
+        FROM rep_activity a
+        LEFT JOIN commissions c
+          ON c.contractor_id = a.contractor_id
+         AND c.type = 'setup'
+         AND DATE_TRUNC('week', c.created_at) = DATE_TRUNC('week', a.date::timestamptz)
+        WHERE a.contractor_id=$1 AND a.date >= NOW() - INTERVAL '60 days'
         GROUP BY 1 ORDER BY 1
       `, [rep.id]);
 
@@ -295,7 +303,9 @@ const ONBOARDING_STEPS = [
           COALESCE(SUM(dials), 0)    AS dials,
           COALESCE(SUM(connects), 0) AS connects,
           COALESCE(SUM(demos), 0)    AS demos,
-          COALESCE(SUM(closes), 0)   AS closes
+          (SELECT COUNT(*) FROM commissions
+           WHERE contractor_id = $1 AND type = 'setup'
+             AND created_at >= NOW() - INTERVAL '7 days') AS closes
         FROM rep_activity
         WHERE contractor_id = $1 AND date >= NOW() - INTERVAL '7 days'
       `, [rep.id]);
@@ -336,8 +346,10 @@ const ONBOARDING_STEPS = [
     message: async (rep) => {
       const { rows: [m] } = await pool.query(`
         SELECT
-          COALESCE(SUM(dials), 0)  AS dials,
-          COALESCE(SUM(closes), 0) AS closes
+          COALESCE(SUM(dials), 0) AS dials,
+          (SELECT COUNT(*) FROM commissions
+           WHERE contractor_id = $1 AND type = 'setup'
+             AND created_at >= NOW() - INTERVAL '14 days') AS closes
         FROM rep_activity
         WHERE contractor_id = $1 AND date >= NOW() - INTERVAL '14 days'
       `, [rep.id]);

@@ -77,7 +77,7 @@ export async function sendOnboardingBurst(rep: {
     `<b>"Can I see it on my business first?"</b>\n→ "The demo you just heard IS the system — your business name, your services, your hours. Same intelligence."\n\n` +
     `Ask me any objection you run into — just text it here and I'll give you a response.\n\n` +
     `<b>Your commands:</b>\n` +
-    `• <code>/log 80 12 3 1</code> — end-of-day totals (dials / connects / demos / closes)\n` +
+    `• <code>/log 80 12 3</code> — end-of-day totals (dials / connects / demos)\n` +
     `• <code>/call</code> — log a connect with outcome + objection in ~15 sec (tappable)\n` +
     `• <code>/stats</code> — your 7-day numbers + unpaid commissions\n` +
     `• <code>/objection [what they said]</code> — log an objection for pattern tracking\n` +

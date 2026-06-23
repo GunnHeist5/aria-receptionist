@@ -316,13 +316,13 @@ export async function POST(req: NextRequest) {
           `<code>/candidates</code> — candidate pipeline\n` +
           `<code>/unactivated</code> — live clients still awaiting forwarding confirmation\n` +
           `<code>/activate [name]</code> — mark client forwarding confirmed\n` +
-          `<code>/log 80 12 3 1</code> — daily totals\n` +
+          `<code>/log 80 12 3</code> — daily totals (dials/connects/demos)\n` +
           `<code>/stats</code> — your numbers\n` +
           `<code>/objection [text]</code> — log an objection\n\n` +
           `Or just ask me anything about the business.`
         : `<b>Your commands</b>\n\n` +
           `<code>/call</code> — log a connect (3 taps, ~15 sec)\n` +
-          `<code>/log 80 12 3 1</code> — end-of-day totals\n` +
+          `<code>/log 80 12 3</code> — end-of-day totals (dials/connects/demos)\n` +
           `<code>/stats</code> — your 7-day numbers + unpaid commissions\n` +
           `<code>/objection [what they said]</code> — log an objection\n` +
           `<code>/insights</code> — your call breakdown\n` +
@@ -434,28 +434,41 @@ export async function POST(req: NextRequest) {
 
     if (text.startsWith('/log')) {
       const parts = text.split(/\s+/);
-      const [dials, connects, demos, closes] = parts.slice(1).map(Number);
+      const [dials, connects, demos] = parts.slice(1).map(Number);
       if (isNaN(dials)) {
-        await tg.send(chatId, 'Usage: /log [dials] [connects] [demos] [closes]\nExample: /log 80 12 3 1');
+        await tg.send(chatId, 'Usage: /log [dials] [connects] [demos]\nExample: /log 80 12 3');
         return NextResponse.json({ ok: true });
       }
       await pool.query(
-        `INSERT INTO rep_activity (contractor_id, date, dials, connects, demos, closes)
-         VALUES ($1, CURRENT_DATE, $2, $3, $4, $5)
+        `INSERT INTO rep_activity (contractor_id, date, dials, connects, demos)
+         VALUES ($1, CURRENT_DATE, $2, $3, $4)
          ON CONFLICT (contractor_id, date) DO UPDATE SET
            dials=$2+rep_activity.dials, connects=$3+rep_activity.connects,
-           demos=$4+rep_activity.demos, closes=$5+rep_activity.closes, updated_at=NOW()`,
-        [rep.id, dials||0, connects||0, demos||0, closes||0]
+           demos=$4+rep_activity.demos, updated_at=NOW()`,
+        [rep.id, dials||0, connects||0, demos||0]
       );
       await pool.query(`UPDATE contractors SET last_active_at=NOW() WHERE id=$1`, [rep.id]);
-      await tg.send(chatId, `✅ Logged! Today: ${dials} dials, ${connects} connects, ${demos} demos, ${closes} closes.`);
+      await tg.send(chatId, `✅ Logged! Today: ${dials} dials, ${connects} connects, ${demos} demos.`);
       return NextResponse.json({ ok: true });
     }
 
     if (text.startsWith('/stats')) {
-      const { rows: [w] } = await pool.query(`SELECT COALESCE(SUM(dials),0) AS d, COALESCE(SUM(connects),0) AS c, COALESCE(SUM(demos),0) AS demos, COALESCE(SUM(closes),0) AS closes FROM rep_activity WHERE contractor_id=$1 AND date >= CURRENT_DATE - 7`, [rep.id]);
-      const { rows: [e] } = await pool.query(`SELECT COALESCE(SUM(amount),0) AS total FROM commissions WHERE contractor_id=$1 AND status='accrued'`, [rep.id]);
-      await tg.send(chatId, `📊 Last 7 days:\n${w.d} dials · ${w.c} connects · ${w.demos} demos · ${w.closes} closes\n\n💰 Unpaid: $${Number(e.total).toFixed(2)}`);
+      const { rows: [w] } = await pool.query(
+        `SELECT COALESCE(SUM(dials),0) AS d, COALESCE(SUM(connects),0) AS c, COALESCE(SUM(demos),0) AS demos
+         FROM rep_activity WHERE contractor_id=$1 AND date >= CURRENT_DATE - 7`,
+        [rep.id]
+      );
+      const { rows: [cl] } = await pool.query(
+        `SELECT COUNT(*) AS closes FROM commissions WHERE contractor_id=$1 AND type='setup' AND created_at >= NOW() - INTERVAL '7 days'`,
+        [rep.id]
+      );
+      const { rows: [e] } = await pool.query(
+        `SELECT COALESCE(SUM(amount),0) AS total FROM commissions WHERE contractor_id=$1 AND status='accrued'`,
+        [rep.id]
+      );
+      await tg.send(chatId,
+        `📊 Last 7 days:\n${w.d} dials · ${w.c} connects · ${w.demos} demos · ${cl.closes} closes ✓\n\n💰 Unpaid: $${Number(e.total).toFixed(2)}`
+      );
       return NextResponse.json({ ok: true });
     }
 
