@@ -19,9 +19,9 @@ export async function sendContractorAgreement(params: {
   name: string;
   email: string;
 }): Promise<ContractResult> {
-  const apiKey     = process.env.PANDADOC_API_KEY;
-  const templateId = process.env.PANDADOC_TEMPLATE_ID;
-  const role       = process.env.PANDADOC_RECIPIENT_ROLE ?? 'Contractor';
+  const apiKey     = process.env.PANDADOC_API_KEY?.trim();
+  const templateId = process.env.PANDADOC_TEMPLATE_ID?.trim();
+  const role       = process.env.PANDADOC_RECIPIENT_ROLE?.trim() || 'Client';
 
   if (!apiKey || !templateId) {
     return { sent: false, error: 'PANDADOC_API_KEY or PANDADOC_TEMPLATE_ID not configured' };
