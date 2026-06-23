@@ -32,3 +32,6 @@ Thumbs.db
 *_temp.js
 *.json.tmp
 9392.json
+
+# Overnight workflow logs (keep the .md reports, drop raw logs)
+overnight/reports/*.log
