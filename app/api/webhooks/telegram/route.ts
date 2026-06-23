@@ -124,6 +124,16 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ callback_query_id: cb.id }),
     });
 
+    // Remove the inline keyboard from the original message so buttons can't be tapped twice
+    const msgChatId  = cb.message?.chat?.id;
+    const msgId      = cb.message?.message_id;
+    if (msgChatId && msgId) {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageReplyMarkup`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: msgChatId, message_id: msgId, reply_markup: { inline_keyboard: [] } }),
+      });
+    }
+
     // ── Call flow callbacks ──────────────────────────────────────────────
     if (data.startsWith('call:')) {
       const [, field, value] = data.split(':');
@@ -170,9 +180,10 @@ export async function POST(req: NextRequest) {
     if (type === 'candidate') {
       if (action === 'approve') {
         const { rows: [c] } = await pool.query(
-          `UPDATE candidates SET status='offered', updated_at=NOW() WHERE id=$1 RETURNING name, email`, [id]
+          `UPDATE candidates SET status='offered', updated_at=NOW()
+           WHERE id=$1 AND status NOT IN ('offered','rejected') RETURNING name, email`, [id]
         );
-        if (!c) return NextResponse.json({ ok: true });
+        if (!c) return NextResponse.json({ ok: true }); // already actioned — buttons already removed above
 
         // Auto-generate slug from name (e.g. "John Smith" → "johnsmith")
         const baseSlug = c.name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20);
