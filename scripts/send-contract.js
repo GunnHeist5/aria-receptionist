@@ -29,13 +29,21 @@ async function main() {
   const [firstName, ...rest] = c.name.trim().split(' ');
   const lastName = rest.join(' ') || '-';
 
+  const recipients = [{ email: c.email, first_name: firstName, last_name: lastName, role }];
+  const companyRole  = (process.env.PANDADOC_COMPANY_ROLE || '').trim();
+  const companyEmail = (process.env.PANDADOC_COMPANY_EMAIL || '').trim();
+  if (companyRole && companyEmail) {
+    const cn = (process.env.PANDADOC_COMPANY_NAME || 'Reachwell').trim().split(' ');
+    recipients.push({ email: companyEmail, first_name: cn[0], last_name: cn.slice(1).join(' ') || '-', role: companyRole });
+  }
+
   const createRes = await fetch('https://api.pandadoc.com/public/v1/documents', {
     method: 'POST',
     headers: { 'Authorization': `API-Key ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: `Reachwell Contractor Agreement — ${c.name}`,
       template_uuid: templateId,
-      recipients: [{ email: c.email, first_name: firstName, last_name: lastName, role }],
+      recipients,
       metadata: { contractor_id: c.id },
       tokens: [
         { name: 'Contractor.Name',  value: c.name },

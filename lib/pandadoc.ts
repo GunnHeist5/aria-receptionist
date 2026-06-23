@@ -37,6 +37,18 @@ export async function sendContractorAgreement(params: {
     ? `\n\nAfter signing, tap here to connect with our team on Telegram so we can get you set up:\nhttps://t.me/${botUsername}?start=ctr_${params.contractorId}`
     : '';
 
+  // Recipients: the rep (Client role) plus the company signer (e.g. role 'Justin')
+  // when configured, so the company signature field is assigned on every contract.
+  const recipients: Array<Record<string, string>> = [
+    { email: params.email, first_name: firstName, last_name: lastName, role },
+  ];
+  const companyRole  = process.env.PANDADOC_COMPANY_ROLE?.trim();
+  const companyEmail = process.env.PANDADOC_COMPANY_EMAIL?.trim();
+  if (companyRole && companyEmail) {
+    const cn = (process.env.PANDADOC_COMPANY_NAME?.trim() || 'Reachwell').split(' ');
+    recipients.push({ email: companyEmail, first_name: cn[0], last_name: cn.slice(1).join(' ') || '-', role: companyRole });
+  }
+
   // Step 1 — create document from template
   const createRes = await fetch('https://api.pandadoc.com/public/v1/documents', {
     method: 'POST',
@@ -44,7 +56,7 @@ export async function sendContractorAgreement(params: {
     body: JSON.stringify({
       name: `Reachwell Contractor Agreement — ${params.name}`,
       template_uuid: templateId,
-      recipients: [{ email: params.email, first_name: firstName, last_name: lastName, role }],
+      recipients,
       metadata: { contractor_id: params.contractorId },
       // These tokens populate merge fields inside the template if you've added them.
       // Add/remove based on what merge fields your template actually uses.

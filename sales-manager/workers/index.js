@@ -93,7 +93,7 @@ async function runContractSignatureChecks() {
   if (!apiKey) return;
 
   const { rows } = await pool.query(
-    `SELECT id, name, contract_document_id FROM contractors
+    `SELECT id, name, email, contract_document_id FROM contractors
      WHERE active = true AND contract_signed_at IS NULL AND contract_document_id IS NOT NULL`
   );
 
@@ -104,9 +104,10 @@ async function runContractSignatureChecks() {
       if (!r.ok) continue;
       const d = await r.json();
 
-      // Rep signed if the document completed OR any recipient finished their part.
-      const signed = d.status === 'document.completed'
-        || (d.recipients || []).some(rec => rec.has_completed);
+      // Rep signed if the doc completed OR the rep's own recipient finished.
+      // Match by email so the company signer (Justin) can't trigger it early.
+      const repRec = (d.recipients || []).find(rec => (rec.email || '').toLowerCase() === (c.email || '').toLowerCase());
+      const signed = d.status === 'document.completed' || (repRec && repRec.has_completed);
       if (!signed) continue;
 
       const { rows: [updated] } = await pool.query(
