@@ -33,7 +33,7 @@ export async function sendOnboardingBurst(rep: {
     `✅ <b>You're in, ${firstName}.</b> Contract signed — let's get you up and running right now.\n\n` +
     `<b>What you're selling:</b>\nAI phone receptionist for local service businesses (HVAC, plumbing, electrical, roofing). It catches missed calls 24/7, qualifies the lead, and texts the owner instantly. They keep their existing number.\n\n` +
     `<b>Client pricing:</b> $500 setup + $297/mo. No contract, cancel anytime. 14-day money-back.\n\n` +
-    `<b>Your pay:</b>\n• $100/mo base (paid regardless)\n• $${rep.commission_setup ?? 400} per close\n• ${rep.commission_residual_pct ?? 10}% monthly residual per client (18-month cap)\n\n` +
+    `<b>Your pay:</b>\n• $100/mo base — every month you're actively working, paid by the 2nd of the next month\n• $${rep.commission_setup ?? 400} per close\n• ${rep.commission_residual_pct ?? 10}% monthly residual per client (18-month cap, while actively engaged)\n\n` +
     `🔗 <b>Your closer link</b> (send this when someone says yes):\n${intakeLink}\n\n` +
     `<b>Daily target:</b> 80-100 dials. Expect 10-15 connects. 1 demo per day = good session.\n\nNext message: the pitch. 👇`
   );
