@@ -28,9 +28,9 @@ async function runScreening() {
       if (!transcript && candidate.submission_url) {
         const url = candidate.submission_url.toLowerCase();
 
-        // Resolve Vocaroo share URLs (voca.ro/ID) to direct mp3
+        // Resolve Vocaroo share URLs (voca.ro/ID or vocaroo.com/ID) to direct mp3
         let fetchUrl = candidate.submission_url;
-        const vocarooMatch = url.match(/voca\.ro\/([a-zA-Z0-9]+)/);
+        const vocarooMatch = url.match(/(?:voca\.ro|vocaroo\.com)\/([a-zA-Z0-9]+)/);
         if (vocarooMatch) fetchUrl = `https://media1.vocaroo.com/mp3/${vocarooMatch[1]}`;
 
         const isAudio = /\.(mp3|m4a|wav|ogg|webm)(\?|$)/.test(fetchUrl.toLowerCase()) || !!vocarooMatch;
