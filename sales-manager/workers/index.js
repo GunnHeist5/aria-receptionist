@@ -187,10 +187,15 @@ async function runMonitoring() {
 // COACHING — runs daily at configured hour
 // ---------------------------------------------------------------------------
 async function runCoaching() {
+  // Only coach reps who are actually onboarded AND past their first week.
+  // Week 1-2 are handled by the onboarding check-in messages; the LLM coach
+  // shouldn't escalate "zero activity" on someone who just signed.
   const { rows: reps } = await pool.query(`
     SELECT c.*, EXTRACT(WEEK FROM AGE(NOW(), c.contract_signed_at)) AS weeks_active
     FROM contractors c
-    WHERE c.active = true AND c.contract_signed_at IS NOT NULL
+    WHERE c.active = true
+      AND c.onboarding_status = 'onboarded'
+      AND c.contract_signed_at < NOW() - INTERVAL '7 days'
   `);
 
   const { rows: [peer] } = await pool.query(`
@@ -201,6 +206,11 @@ async function runCoaching() {
 
   for (const rep of reps) {
     try {
+      // Dedup across worker restarts: skip if we already coached/escalated in the last 20h.
+      const { rows: recent } = await pool.query(
+        `SELECT 1 FROM coaching_sessions WHERE contractor_id=$1 AND created_at > NOW() - INTERVAL '20 hours' LIMIT 1`, [rep.id]);
+      if (recent.length) continue;
+
       const { rows: [m7] }  = await pool.query(
         `SELECT * FROM rep_metrics WHERE contractor_id=$1 AND period_type='week' ORDER BY computed_at DESC LIMIT 1`, [rep.id]);
       const { rows: [m30] } = await pool.query(
@@ -213,6 +223,9 @@ async function runCoaching() {
       if (result.action === 'no_action') continue;
       if (result.action === 'escalate_to_human') {
         await tg.sendToOwner(`⚠️ <b>Coaching escalation: ${rep.name}</b>\n\n${result.internal_notes}`);
+        await pool.query(
+          `INSERT INTO coaching_sessions (contractor_id, trigger, internal_notes, action_taken) VALUES ($1, 'scheduled', $2, 'escalated')`,
+          [rep.id, result.internal_notes]);
         continue;
       }
 
@@ -245,7 +258,10 @@ async function runCoaching() {
 async function runOffboarding() {
   const { rows: reps } = await pool.query(`
     SELECT * FROM contractors
-    WHERE active = true AND contract_signed_at IS NOT NULL
+    WHERE active = true
+      AND onboarding_status = 'onboarded'
+      AND contract_signed_at IS NOT NULL
+      AND contract_signed_at < NOW() - INTERVAL '${flags.INACTIVITY_REENGAGEMENT_DAYS} days'
       AND (last_active_at IS NULL OR last_active_at < NOW() - INTERVAL '${flags.INACTIVITY_REENGAGEMENT_DAYS} days')
       AND id NOT IN (SELECT contractor_id FROM offboarding_proposals WHERE status = 'pending')
   `);
