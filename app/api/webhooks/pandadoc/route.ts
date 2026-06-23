@@ -4,11 +4,13 @@ import { getPool } from '@/lib/db';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const tg = require('../../../../sales-manager/lib/telegram');
 
-// PandaDoc webhook. Notes on the real payload shape (the previous version got
-// all three wrong, so it never fired):
+// PandaDoc webhook. Notes on the real payload shape:
 //   • Body is an ARRAY of event objects: [{ event, data: {...} }, ...]
-//   • Completion arrives as event 'document_state_changed' with
-//     data.status === 'document.completed'
+//   • We trigger on the REP completing their signature ('recipient_completed')
+//     OR full document completion ('document_state_changed' + status
+//     'document.completed') — whichever fires first. Triggering on
+//     recipient_completed means a leftover owner/sender signature field on the
+//     template cannot block onboarding: the rep's signature alone advances it.
 //   • Signature is an HMAC-SHA256 hex of the RAW body, keyed with the shared
 //     key, delivered in the `signature` query param (NOT a header).
 
@@ -35,12 +37,16 @@ export async function POST(req: NextRequest) {
   const pool = getPool();
 
   for (const ev of events as any[]) {
-    const data = ev?.data ?? ev?.document ?? {};
-    if (data?.status !== 'document.completed') continue;
+    const evType = ev?.event ?? ev?.type;
+    const data   = ev?.data ?? ev?.document ?? {};
+
+    // Rep signed their part (recipient_completed) OR doc fully completed.
+    const repSigned = evType === 'recipient_completed' || data?.status === 'document.completed';
+    if (!repSigned) continue;
 
     const docId        = data?.id;
     const contractorId = data?.metadata?.contractor_id;
-    if (!contractorId) { console.error('[pandadoc] completed doc missing contractor_id', docId); continue; }
+    if (!contractorId) { console.error('[pandadoc] signed event missing contractor_id', docId, evType); continue; }
 
     // Idempotent: only the first completion records the signature.
     const { rows: [rep] } = await pool.query(
