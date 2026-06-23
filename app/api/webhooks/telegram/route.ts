@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
     if (type === 'candidate') {
       if (action === 'approve') {
         const { rows: [c] } = await pool.query(
-          `UPDATE candidates SET status='offered', updated_at=NOW()
+          `UPDATE candidates SET status='offered'
            WHERE id=$1 AND status NOT IN ('offered','rejected') RETURNING name, email`, [id]
         );
         if (!c) return NextResponse.json({ ok: true }); // already actioned — buttons already removed above
@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
           );
         }
       } else {
-        await pool.query(`UPDATE candidates SET status='rejected', updated_at=NOW() WHERE id=$1`, [id]);
+        await pool.query(`UPDATE candidates SET status='rejected' WHERE id=$1`, [id]);
         await tg.sendToOwner('Candidate archived.');
       }
     }
