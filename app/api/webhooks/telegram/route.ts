@@ -206,6 +206,11 @@ export async function POST(req: NextRequest) {
           email: c.email,
         });
 
+        // Store the doc id so the worker can poll PandaDoc for the rep's signature.
+        if (result.docId) {
+          await pool.query(`UPDATE contractors SET contract_document_id=$2 WHERE id=$1`, [contractor.id, result.docId]);
+        }
+
         // Telegram deep link — rep clicks this to connect their account
         const botUsername = process.env.TELEGRAM_BOT_USERNAME;
         const deepLink    = botUsername

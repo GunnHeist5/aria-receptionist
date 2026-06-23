@@ -83,6 +83,55 @@ async function runScreening() {
 }
 
 // ---------------------------------------------------------------------------
+// CONTRACT SIGNATURE POLLING — runs every tick (5 min)
+// Replaces the fragile PandaDoc webhook: checks each pending contractor's
+// document and, when the rep has signed their part, notifies the owner with
+// Approve/Deny buttons. Idempotent via contract_signed_at IS NULL.
+// ---------------------------------------------------------------------------
+async function runContractSignatureChecks() {
+  const apiKey = (process.env.PANDADOC_API_KEY || '').trim();
+  if (!apiKey) return;
+
+  const { rows } = await pool.query(
+    `SELECT id, name, contract_document_id FROM contractors
+     WHERE active = true AND contract_signed_at IS NULL AND contract_document_id IS NOT NULL`
+  );
+
+  for (const c of rows) {
+    try {
+      const r = await fetch(`https://api.pandadoc.com/public/v1/documents/${c.contract_document_id}/details`,
+        { headers: { Authorization: `API-Key ${apiKey}` } });
+      if (!r.ok) continue;
+      const d = await r.json();
+
+      // Rep signed if the document completed OR any recipient finished their part.
+      const signed = d.status === 'document.completed'
+        || (d.recipients || []).some(rec => rec.has_completed);
+      if (!signed) continue;
+
+      const { rows: [updated] } = await pool.query(
+        `UPDATE contractors SET
+           contract_signed_at = NOW(),
+           onboarding_status  = 'signed_pending_approval',
+           updated_at         = NOW()
+         WHERE id = $1 AND contract_signed_at IS NULL
+         RETURNING id, name`,
+        [c.id]
+      );
+      if (!updated) continue;
+
+      await tg.sendToOwner(
+        `✅ <b>${updated.name}</b> signed the contractor agreement.\n\n` +
+        `Approve to onboard them now — sends their full briefing (script, objections, closer link) on Telegram.`,
+        tg.approvalKeyboard('onboard', updated.id)
+      );
+    } catch (err) {
+      console.error('[contract-check] error for', c.id, err.message);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // MONITORING — runs every hour, computes 7d + 30d metrics per active rep
 // ---------------------------------------------------------------------------
 async function runMonitoring() {
@@ -445,6 +494,7 @@ async function tick() {
   const hourUTC = now.getUTCHours();
 
   await runScreening().catch(e => console.error('[tick:screening]', e.message));
+  await runContractSignatureChecks().catch(e => console.error('[tick:contract-check]', e.message));
   await runMonitoring().catch(e => console.error('[tick:monitoring]', e.message));
   await runOnboarding().catch(e => console.error('[tick:onboarding]', e.message));
   await runScriptLoopIfDue().catch(e => console.error('[tick:script-loop]', e.message));

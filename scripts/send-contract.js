@@ -49,6 +49,9 @@ async function main() {
   if (!docId) { console.error('Create failed:', JSON.stringify(doc)); await pool.end(); process.exit(1); }
   console.log('Doc created:', docId);
 
+  // Store the doc id so the worker's 5-min poll detects the signature.
+  await pool.query(`UPDATE contractors SET contract_document_id=$2 WHERE id=$1`, [c.id, docId]);
+
   await new Promise(r => setTimeout(r, 2500));
 
   const sendRes = await fetch(`https://api.pandadoc.com/public/v1/documents/${docId}/send`, {
