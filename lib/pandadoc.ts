@@ -30,6 +30,13 @@ export async function sendContractorAgreement(params: {
   const [firstName, ...rest] = params.name.trim().split(' ');
   const lastName = rest.join(' ') || '-';
 
+  // Telegram deep link goes in the signing email so the rep connects without
+  // the owner forwarding anything. Onboarding still waits for owner approval.
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME?.trim();
+  const deepLink = botUsername
+    ? `\n\nAfter signing, tap here to connect with our team on Telegram so we can get you set up:\nhttps://t.me/${botUsername}?start=ctr_${params.contractorId}`
+    : '';
+
   // Step 1 — create document from template
   const createRes = await fetch('https://api.pandadoc.com/public/v1/documents', {
     method: 'POST',
@@ -66,7 +73,7 @@ export async function sendContractorAgreement(params: {
     method: 'POST',
     headers: { 'Authorization': `API-Key ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      message: `Hi ${firstName}, please sign your Reachwell contractor agreement to get started.`,
+      message: `Hi ${firstName}, please sign your Reachwell contractor agreement to get started.${deepLink}`,
       silent: false,
     }),
   });

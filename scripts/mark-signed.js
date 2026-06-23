@@ -16,11 +16,13 @@ async function main() {
   if (!id) { console.error('Usage: node --env-file=.env scripts/mark-signed.js <contractor_id>'); process.exit(1); }
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  // Sets signed AND owner-approved in one shot (manual fallback = you've already
+  // decided to onboard them). When the rep taps their deep link, the /start
+  // handler sees 'onboarding_approved' and fires the burst.
   const { rows: [r] } = await pool.query(
     `UPDATE contractors SET
        contract_signed_at = NOW(),
-       onboarding_status  = 'contract_signed',
-       onboarding_step    = 3,
+       onboarding_status  = 'onboarding_approved',
        updated_at         = NOW()
      WHERE id = $1 AND contract_signed_at IS NULL
      RETURNING name, slug, channel_id`,

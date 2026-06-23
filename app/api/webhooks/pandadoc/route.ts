@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getPool } from '@/lib/db';
-import { sendOnboardingBurst } from '@/lib/onboarding-burst';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const tg = require('../../../../sales-manager/lib/telegram');
 
 // PandaDoc webhook. Notes on the real payload shape (the previous version got
 // all three wrong, so it never fired):
@@ -41,22 +42,26 @@ export async function POST(req: NextRequest) {
     const contractorId = data?.metadata?.contractor_id;
     if (!contractorId) { console.error('[pandadoc] completed doc missing contractor_id', docId); continue; }
 
-    // Idempotent: only the first completion sets signed + returns the row to onboard.
+    // Idempotent: only the first completion records the signature.
     const { rows: [rep] } = await pool.query(
       `UPDATE contractors SET
          contract_document_id = $2,
          contract_signed_at   = NOW(),
-         onboarding_status    = 'contract_signed',
-         onboarding_step      = 3,
+         onboarding_status    = 'signed_pending_approval',
          updated_at           = NOW()
        WHERE id = $1 AND contract_signed_at IS NULL
-       RETURNING name, channel_id, slug, commission_setup, commission_residual_pct`,
+       RETURNING id, name`,
       [contractorId, docId]
     );
+    if (!rep) continue; // already processed
 
-    // Fire the burst only if they've already connected Telegram. If not, the
-    // /start ctr_ handler fires it when they tap their deep link.
-    if (rep?.channel_id) await sendOnboardingBurst(rep);
+    // Onboarding is gated on owner approval — notify with Approve/Deny buttons.
+    // The actual onboarding burst fires from the Telegram approve:onboard handler.
+    await tg.sendToOwner(
+      `✅ <b>${rep.name}</b> signed the contractor agreement.\n\n` +
+      `Approve to onboard them now — sends their full briefing (script, objections, closer link) on Telegram.`,
+      tg.approvalKeyboard('onboard', rep.id)
+    );
   }
 
   return NextResponse.json({ ok: true });

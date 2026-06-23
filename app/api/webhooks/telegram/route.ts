@@ -266,6 +266,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Owner approves onboarding AFTER the rep signs (fired from the PandaDoc webhook).
+    if (type === 'onboard') {
+      if (action === 'approve') {
+        const { rows: [rep] } = await pool.query(
+          `SELECT id, name, slug, channel_id, commission_setup, commission_residual_pct FROM contractors WHERE id=$1`, [id]
+        );
+        if (!rep) return NextResponse.json({ ok: true });
+        if (rep.channel_id) {
+          // Rep already connected Telegram → onboard immediately.
+          await sendOnboardingBurst(rep);
+          await pool.query(`UPDATE contractors SET onboarding_status='onboarded', onboarding_step=3, updated_at=NOW() WHERE id=$1`, [id]);
+          await tg.sendToOwner(`✅ <b>${rep.name}</b> onboarded — full briefing sent on Telegram.`);
+        } else {
+          // Not connected yet → mark approved; /start fires the burst when they tap their link.
+          await pool.query(`UPDATE contractors SET onboarding_status='onboarding_approved', updated_at=NOW() WHERE id=$1`, [id]);
+          const bot = process.env.TELEGRAM_BOT_USERNAME;
+          await tg.sendToOwner(
+            `✅ <b>${rep.name}</b> approved. They haven't connected Telegram yet — they'll be onboarded automatically when they tap their link (it's in their contract email):\nhttps://t.me/${bot}?start=ctr_${id}`
+          );
+        }
+      } else {
+        await pool.query(`UPDATE contractors SET onboarding_status='onboarding_denied', updated_at=NOW() WHERE id=$1`, [id]);
+        await tg.sendToOwner('Onboarding denied.');
+      }
+    }
+
     return NextResponse.json({ ok: true });
   }
 
@@ -298,20 +324,27 @@ export async function POST(req: NextRequest) {
       const { rows: [contractor] } = await pool.query(
         `UPDATE contractors SET channel_id=$1, updated_at=NOW()
          WHERE id=$2 AND channel_id IS NULL
-         RETURNING name, slug, commission_setup, commission_residual_pct, contract_signed_at`,
+         RETURNING id, name, slug, commission_setup, commission_residual_pct, contract_signed_at, onboarding_status`,
         [chatId, contractorId]
       );
       if (!contractor) {
         await tg.send(chatId, 'This link has already been used or is invalid. Contact your recruiter if you have an issue.');
         return NextResponse.json({ ok: true });
       }
-      if (contractor.contract_signed_at) {
-        // Signed before connecting Telegram — fire onboarding now
+      const firstName = contractor.name.split(' ')[0];
+      if (contractor.onboarding_status === 'onboarding_approved') {
+        // Owner already approved onboarding before the rep connected — fire it now.
         await sendOnboardingBurst({ ...contractor, channel_id: chatId });
+        await pool.query(`UPDATE contractors SET onboarding_status='onboarded', onboarding_step=3, updated_at=NOW() WHERE id=$1`, [contractor.id]);
+      } else if (contractor.contract_signed_at) {
+        // Signed, but owner hasn't approved onboarding yet.
+        await tg.send(chatId,
+          `✅ Connected, ${firstName}! You're all set on our end — your full onboarding will land here as soon as we finalize. Hang tight.`
+        );
       } else {
         await tg.send(chatId,
-          `✅ Connected, ${contractor.name.split(' ')[0]}!\n\n` +
-          `Check your email for the contract. Once you sign, I'll send your full onboarding — script, objection playbook, everything — right here.`
+          `✅ Connected, ${firstName}!\n\n` +
+          `Check your email for the contract. Once you sign it, you'll get your full onboarding — script, objection playbook, everything — right here.`
         );
       }
       return NextResponse.json({ ok: true });
