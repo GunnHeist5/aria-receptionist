@@ -23,22 +23,32 @@ async function runScreening() {
     try {
       await pool.query(`UPDATE candidates SET status = 'screening' WHERE id = $1`, [candidate.id]);
 
-      // Transcribe audio if URL looks like a direct audio file
+      // Transcribe audio — supports direct files and Vocaroo links
       let transcript = candidate.transcript;
       if (!transcript && candidate.submission_url) {
         const url = candidate.submission_url.toLowerCase();
-        if (/\.(mp3|m4a|wav|ogg|webm)(\?|$)/.test(url)) {
-          const audioRes  = await fetch(candidate.submission_url);
-          const arrayBuf  = await audioRes.arrayBuffer();
-          const ext       = url.match(/\.(mp3|m4a|wav|ogg|webm)/)?.[1] ?? 'mp3';
-          const file      = new File([arrayBuf], `submission.${ext}`, { type: `audio/${ext}` });
-          const result    = await openai.audio.transcriptions.create({ file, model: 'whisper-1' });
-          transcript      = result.text;
-          await pool.query(`UPDATE candidates SET transcript = $1 WHERE id = $2`, [transcript, candidate.id]);
+
+        // Resolve Vocaroo share URLs (voca.ro/ID) to direct mp3
+        let fetchUrl = candidate.submission_url;
+        const vocarooMatch = url.match(/voca\.ro\/([a-zA-Z0-9]+)/);
+        if (vocarooMatch) fetchUrl = `https://media1.vocaroo.com/mp3/${vocarooMatch[1]}`;
+
+        const isAudio = /\.(mp3|m4a|wav|ogg|webm)(\?|$)/.test(fetchUrl.toLowerCase()) || !!vocarooMatch;
+        if (isAudio) {
+          try {
+            const audioRes = await fetch(fetchUrl);
+            const arrayBuf = await audioRes.arrayBuffer();
+            const ext      = fetchUrl.toLowerCase().match(/\.(mp3|m4a|wav|ogg|webm)/)?.[1] ?? 'mp3';
+            const file     = new File([arrayBuf], `submission.${ext}`, { type: `audio/${ext}` });
+            const result   = await openai.audio.transcriptions.create({ file, model: 'whisper-1' });
+            transcript     = result.text;
+          } catch (e) {
+            transcript = `[Transcription failed for ${candidate.submission_url}: ${e.message}. Manual review required.]`;
+          }
         } else {
           transcript = `[Auto-transcription not available for this URL type: ${candidate.submission_url}. Manual review required.]`;
-          await pool.query(`UPDATE candidates SET transcript = $1 WHERE id = $2`, [transcript, candidate.id]);
         }
+        await pool.query(`UPDATE candidates SET transcript = $1 WHERE id = $2`, [transcript, candidate.id]);
       }
 
       const result = await screenCandidate(pool, { ...candidate, transcript });
