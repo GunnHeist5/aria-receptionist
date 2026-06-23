@@ -1,50 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { getPool } from '@/lib/db';
 import { sendOnboardingBurst } from '@/lib/onboarding-burst';
 
+// PandaDoc webhook. Notes on the real payload shape (the previous version got
+// all three wrong, so it never fired):
+//   • Body is an ARRAY of event objects: [{ event, data: {...} }, ...]
+//   • Completion arrives as event 'document_state_changed' with
+//     data.status === 'document.completed'
+//   • Signature is an HMAC-SHA256 hex of the RAW body, keyed with the shared
+//     key, delivered in the `signature` query param (NOT a header).
+
 export async function POST(req: NextRequest) {
-  const secret = process.env.PANDADOC_WEBHOOK_SECRET;
+  const raw = await req.text();
+
+  // Verify HMAC signature when a shared key is configured.
+  const secret = process.env.PANDADOC_WEBHOOK_SECRET?.trim();
   if (secret) {
-    const sig = req.headers.get('x-pandadoc-signature');
-    if (sig !== secret) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const provided = new URL(req.url).searchParams.get('signature') ?? '';
+    const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      console.error('[pandadoc] signature mismatch — rejecting');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
-  const body      = await req.json();
-  const event     = body?.event ?? body?.type;
-  const docId     = body?.data?.id ?? body?.document?.id;
-  const metadata  = body?.data?.metadata ?? body?.document?.metadata ?? {};
+  let payload: unknown;
+  try { payload = JSON.parse(raw); } catch { return NextResponse.json({ error: 'bad json' }, { status: 400 }); }
 
-  if (event !== 'document.completed') return NextResponse.json({ ok: true, ignored: true });
+  const events = Array.isArray(payload) ? payload : [payload];
+  const pool = getPool();
 
-  const pool         = getPool();
-  const contractorId = metadata.contractor_id;
-  if (!contractorId) {
-    console.error('[pandadoc] no contractor_id in metadata', docId);
-    return NextResponse.json({ ok: true });
+  for (const ev of events as any[]) {
+    const data = ev?.data ?? ev?.document ?? {};
+    if (data?.status !== 'document.completed') continue;
+
+    const docId        = data?.id;
+    const contractorId = data?.metadata?.contractor_id;
+    if (!contractorId) { console.error('[pandadoc] completed doc missing contractor_id', docId); continue; }
+
+    // Idempotent: only the first completion sets signed + returns the row to onboard.
+    const { rows: [rep] } = await pool.query(
+      `UPDATE contractors SET
+         contract_document_id = $2,
+         contract_signed_at   = NOW(),
+         onboarding_status    = 'contract_signed',
+         onboarding_step      = 3,
+         updated_at           = NOW()
+       WHERE id = $1 AND contract_signed_at IS NULL
+       RETURNING name, channel_id, slug, commission_setup, commission_residual_pct`,
+      [contractorId, docId]
+    );
+
+    // Fire the burst only if they've already connected Telegram. If not, the
+    // /start ctr_ handler fires it when they tap their deep link.
+    if (rep?.channel_id) await sendOnboardingBurst(rep);
   }
-
-  // Mark signed, set onboarding_step=3 (burst messages sent here, worker handles day 7+)
-  await pool.query(
-    `UPDATE contractors SET
-       contract_document_id = $2,
-       contract_signed_at   = NOW(),
-       onboarding_status    = 'contract_signed',
-       onboarding_step      = 3,
-       updated_at           = NOW()
-     WHERE id = $1`,
-    [contractorId, docId]
-  );
-
-  const { rows: [rep] } = await pool.query(
-    `SELECT name, channel_id, slug, commission_setup, commission_residual_pct FROM contractors WHERE id = $1`,
-    [contractorId]
-  );
-
-  if (rep?.channel_id) {
-    await sendOnboardingBurst(rep);
-  }
-  // If channel_id is null the rep hasn't connected Telegram yet.
-  // The /start handler in the Telegram webhook will fire the burst when they do.
 
   return NextResponse.json({ ok: true });
 }
