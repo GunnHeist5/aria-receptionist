@@ -148,6 +148,91 @@ async function onCheckoutComplete(session: Stripe.Checkout.Session, db: Pool) {
   }
 }
 
+async function onInvoicePaymentSucceeded(invoice: Stripe.Invoice, db: Pool) {
+  // Only process monthly renewals — first invoice is handled by checkout.session.completed
+  if ((invoice as any).billing_reason !== 'subscription_cycle') return;
+
+  const customerId = typeof invoice.customer === 'string'
+    ? invoice.customer
+    : (invoice.customer as Stripe.Customer | null)?.id;
+  if (!customerId) return;
+
+  const { rows: clientRows } = await db.query(
+    `SELECT id, contractor_id, created_at FROM clients WHERE stripe_customer_id = $1 LIMIT 1`,
+    [customerId]
+  );
+  if (!clientRows.length) {
+    // Stripe customer not mapped to a client — log and bail
+    await db.query(
+      `INSERT INTO events (client_id, type, payload) VALUES (NULL, 'other', $1)`,
+      [JSON.stringify({ event: 'residual_skipped', reason: 'client_not_found', customerId, invoiceId: invoice.id })]
+    );
+    return;
+  }
+
+  const { id: clientId, contractor_id: contractorId } = clientRows[0];
+
+  if (!contractorId) return; // no rep on this client, nothing to pay
+
+  // Derive period from Stripe's billing period end (deterministic even if webhook is delayed)
+  const periodEnd  = (invoice as any).period_end as number; // Unix seconds
+  const periodDate = new Date(periodEnd * 1000);
+  const period     = `${periodDate.getUTCFullYear()}-${String(periodDate.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  // Gate 1: rep must still be active
+  const { rows: [rep] } = await db.query(
+    `SELECT active, commission_residual_pct FROM contractors WHERE id = $1`,
+    [contractorId]
+  );
+  if (!rep || !rep.active) {
+    await db.query(
+      `INSERT INTO events (client_id, type, payload) VALUES ($1, 'other', $2)`,
+      [clientId, JSON.stringify({ event: 'residual_skipped', reason: 'rep_inactive', contractorId, period, invoiceId: invoice.id })]
+    );
+    return;
+  }
+
+  // Gate 2: 18-month cap — count residual rows already recorded for this client+rep
+  const { rows: [capRow] } = await db.query(
+    `SELECT COUNT(*) AS n FROM commissions WHERE contractor_id = $1 AND client_id = $2 AND type = 'residual'`,
+    [contractorId, clientId]
+  );
+  if (Number(capRow.n) >= 18) {
+    await db.query(
+      `INSERT INTO events (client_id, type, payload) VALUES ($1, 'other', $2)`,
+      [clientId, JSON.stringify({ event: 'residual_skipped', reason: 'cap_reached', contractorId, period, monthsEarned: Number(capRow.n), invoiceId: invoice.id })]
+    );
+    return;
+  }
+
+  // Idempotent insert — period+contractor+client+type is unique for a renewal month
+  const amountPaid = (invoice.amount_paid ?? 0) / 100; // Stripe amount is in cents
+  const mrr        = amountPaid > 0 ? amountPaid : MONTHLY_PRICE_CENTS / 100;
+  const residual   = Math.round((Number(rep.commission_residual_pct) / 100) * mrr * 100) / 100;
+
+  const { rowCount } = await db.query(
+    `INSERT INTO commissions (contractor_id, client_id, type, amount, period, status)
+     SELECT $1, $2, 'residual', $3, $4, 'accrued'
+     WHERE NOT EXISTS (
+       SELECT 1 FROM commissions
+       WHERE contractor_id = $1 AND client_id = $2 AND type = 'residual' AND period = $4
+     )`,
+    [contractorId, clientId, residual, period]
+  );
+
+  await db.query(
+    `INSERT INTO events (client_id, type, payload) VALUES ($1, 'payment_succeeded', $2)`,
+    [clientId, JSON.stringify({
+      event:       rowCount && rowCount > 0 ? 'residual_recorded' : 'residual_duplicate_skipped',
+      contractorId,
+      period,
+      amount:      residual,
+      monthNumber: Number(capRow.n) + 1,
+      invoiceId:   invoice.id,
+    })]
+  );
+}
+
 async function onPaymentFailed(invoice: Stripe.Invoice, db: Pool, deprovisionFn: DeprovisionFn) {
   const customerId = typeof invoice.customer === 'string'
     ? invoice.customer
@@ -242,7 +327,7 @@ async function onSubscriptionCanceled(
     const daysHeld = Math.floor((Date.now() - new Date(churned[0].created_at).getTime()) / 86_400_000);
     if (daysHeld <= clawbackDays) {
       const { rows: clawed } = await db.query(
-        `UPDATE commissions SET status='clawed_back', updated_at=NOW()
+        `UPDATE commissions SET status='clawed_back'
          WHERE client_id=$1 AND status='accrued' RETURNING contractor_id, amount`,
         [client.id]
       );
@@ -297,6 +382,9 @@ export async function handleStripeWebhook(
   switch (event.type) {
     case 'checkout.session.completed':
       await onCheckoutComplete(event.data.object as Stripe.Checkout.Session, db);
+      break;
+    case 'invoice.payment_succeeded':
+      await onInvoicePaymentSucceeded(event.data.object as Stripe.Invoice, db);
       break;
     case 'invoice.payment_failed':
       await onPaymentFailed(event.data.object as Stripe.Invoice, db, deprovisionFn);
