@@ -35,7 +35,8 @@ Keep it that way.
    sensible edge cases.
 6. **Run the tests.** Iterate until they pass or you hit a genuine blocker.
    Anything requiring a real external system: mock it and note the assumption.
-7. **Write the report** to `overnight/REPORT.md` (format below).
+7. **Write the report** to `overnight/REPORT.md` (format below), and write a
+   one-word machine status to `overnight/STATUS` (see "Status file").
 
 ## Report format — write exactly these sections to `overnight/REPORT.md`
 ```
@@ -62,6 +63,15 @@ Keep it that way.
 ## Risk notes
 <anything that could be wrong, assumptions made, things mocked>
 ```
+
+## Status file
+Also write `overnight/STATUS` whose first line is exactly one of:
+- `PASS` — implemented and all tests pass; ready for review.
+- `FAIL` — implemented but tests fail or it doesn't work yet.
+- `BLOCKED` — you need a human decision or missing info to proceed.
+
+The queue runner reads this to route the task (done vs needs-review) and to
+build the morning summary. If you write no STATUS, it's treated as needs-review.
 
 Be honest. If tests fail or you couldn't finish, say so plainly with the
 evidence — a truthful "blocked here, here's why" is far more useful than a

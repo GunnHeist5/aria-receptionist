@@ -16,6 +16,28 @@ branch. You decide whether to ship. Production is never touched.
 4. **Review and ship yourself.** The work sits on a dev branch in a separate
    worktree. Nothing was pushed or deployed.
 
+## Queue mode (continuous loop — recommended for a backlog)
+
+Instead of one task at a time, keep a queue the loop works through continuously.
+
+1. Drop one spec per `.md` file into [`queue/`](queue/). Numeric prefixes set
+   order: `01-foo.md`, `02-bar.md`. Add more any time — even while it's running.
+   (Use [`TASK.md`](TASK.md) as a template for each spec.)
+2. Start the loop:
+   ```bash
+   ./overnight/run-queue.sh          # runs forever, idles when the queue is empty
+   ./overnight/run-queue.sh --once   # process what's queued now, then exit
+   ```
+3. Each task is built and tested **in its own dev branch + worktree**, fully
+   isolated from the others. The spec file then moves to `queue/done/` (passed)
+   or `queue/failed/` (failed or blocked).
+4. **In the morning, open [`reports/SUMMARY.md`](reports/)** — a running table of
+   every task with its status, branch, and report link. Drill into the per-task
+   report for detail.
+
+Same safety model as below applies to every task. Nothing is pushed or deployed
+— you review and ship each branch yourself, outside the loop.
+
 ## What happens under the hood
 
 - A fresh **git worktree** is created at `../overnight-runs/<timestamp>` on a new

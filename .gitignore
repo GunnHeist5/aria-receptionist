@@ -35,3 +35,7 @@ Thumbs.db
 
 # Overnight workflow logs (keep the .md reports, drop raw logs)
 overnight/reports/*.log
+
+# Overnight queue task specs (they move between queue/done/failed; the reports are the durable record)
+overnight/queue/*.md
+overnight/queue/**/*.md

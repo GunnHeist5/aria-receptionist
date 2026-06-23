@@ -1,0 +1,29 @@
+OVERNIGHT TASK QUEUE
+====================
+
+Drop one task spec per .md file into THIS folder (overnight/queue/).
+
+  - The loop picks them up in filename order. Prefix with numbers to order:
+        01-add-coupon-codes.md
+        02-rep-leaderboard.md
+        03-export-clients-csv.md
+  - You can add files any time, even while the loop is running.
+  - Use the template in overnight/TASK.md as a starting point for each spec.
+        The more specific the acceptance criteria, the better the result.
+
+What happens to each file:
+  - While being worked on  -> moved to processing/
+  - Implemented + tests pass (PASS) -> moved to done/
+  - Tests failed / blocked / needs you -> moved to failed/
+
+Where the results go:
+  - Per-task report:  overnight/reports/<timestamp>-<task>.md
+  - Rolling summary:  overnight/reports/SUMMARY.md   (start here in the morning)
+  - The code itself:  a dev branch overnight/<timestamp>-<task> in a worktree
+                      under ../overnight-runs/  (nothing is pushed or deployed)
+
+Start the loop:
+    ./overnight/run-queue.sh          # runs forever, idles when empty
+    ./overnight/run-queue.sh --once   # process what's queued now, then stop
+
+This file (HOWTO.txt) is ignored by the loop — only *.md files are tasks.
