@@ -239,8 +239,8 @@ async function run() {
       [a.category, a.title]
     );
     await pool.query(
-      `INSERT INTO knowledge_base (category, title, content, is_placeholder, created_at, updated_at)
-       VALUES ($1, $2, $3, false, NOW(), NOW())`,
+      `INSERT INTO knowledge_base (category, title, content, is_placeholder, updated_at)
+       VALUES ($1, $2, $3, false, NOW())`,
       [a.category, a.title, a.content]
     );
     console.log(`  ✓ [${a.category}] ${a.title}`);

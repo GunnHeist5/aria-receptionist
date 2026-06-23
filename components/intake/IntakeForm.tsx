@@ -128,10 +128,10 @@ export default function IntakeForm({ refSlug }: { refSlug?: string | null }) {
             <label className={label}>ZIP</label>
             <input className={field} value={form.zip} onChange={set('zip')} placeholder="78701" />
           </div>
+          {/* Website stored as metadata. Future: auto-populate services/context by scraping the client's site. */}
           <div className="sm:col-span-2">
             <label className={label}>Business Website (optional)</label>
             <input className={field} type="url" value={form.website} onChange={set('website')} placeholder="https://murphysplumbing.com" />
-            <p className="text-xs text-[#555] mt-1">If provided, the AI will be trained on the site content.</p>
           </div>
         </div>
       </section>
@@ -270,7 +270,7 @@ export default function IntakeForm({ refSlug }: { refSlug?: string | null }) {
       <motion.button type="submit" disabled={loading}
         whileHover={{ opacity: loading ? 1 : 0.9 }}
         className="w-full bg-[#c9a84c] text-[#050505] py-3.5 text-sm font-medium uppercase tracking-widest disabled:opacity-50">
-        {loading ? 'Submitting…' : 'Onboard Client →'}
+        {loading ? 'Submitting…' : 'Set Up My AI Receptionist →'}
       </motion.button>
     </form>
   );

@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import IntakeForm from '@/components/intake/IntakeForm';
 
 export const metadata: Metadata = {
-  title: 'Client Onboarding — ARIA Capital',
+  title: 'Get Started — Reachwell',
   robots: 'noindex',
 };
 
@@ -15,25 +15,22 @@ export default function IntakePage({ searchParams }: { searchParams: { ref?: str
         {/* Header */}
         <div className="mb-12">
           <p className="text-[#c9a84c] text-xs font-mono uppercase tracking-widest mb-3">
-            ARIA Capital — Internal
+            Reachwell
           </p>
           <h1 className="text-3xl sm:text-4xl text-[#f5f2ee] mb-3">
-            Client Onboarding
+            Get Your AI Receptionist
           </h1>
           <p className="text-sm text-[#555] leading-relaxed">
-            Fill out the form below after closing a sale. The AI receptionist
-            will be configured and live within a few minutes.
+            Fill out the form below and your AI receptionist will be configured
+            and live within a few minutes. We&apos;ll text you once it&apos;s ready.
           </p>
-          {refSlug && (
-            <p className="text-xs text-[#c9a84c]/60 font-mono mt-2">ref: {refSlug}</p>
-          )}
           <div className="h-px bg-[#1a1a1a] mt-8" />
         </div>
 
         <IntakeForm refSlug={refSlug} />
 
         <p className="text-xs text-[#333] mt-8 text-center">
-          ARIA Capital LLC — Internal tool. Do not share this URL.
+          Reachwell — Questions? Reply to your sales rep.
         </p>
       </div>
     </main>

@@ -20,10 +20,18 @@ const PLUMBING_KW = [
   'water line', 'gas line', 'repiping',
 ];
 
+// Short alpha-only keywords (≤2 chars, e.g. 'ac') must match as standalone words
+// to avoid false positives like 'ac' matching inside 'replacement', 'each', etc.
+function kwMatch(service: string, kw: string): boolean {
+  if (kw.length <= 2 && /^[a-z]+$/i.test(kw))
+    return new RegExp(`(?:^|[^a-z])${kw}(?:[^a-z]|$)`, 'i').test(service);
+  return service.includes(kw);
+}
+
 function deriveBusinessType(services: string[]): string {
   const lower     = services.map(s => s.toLowerCase());
-  const hasHvac   = lower.some(s => HVAC_KW.some(k => s.includes(k)));
-  const hasPlumb  = lower.some(s => PLUMBING_KW.some(k => s.includes(k)));
+  const hasHvac   = lower.some(s => HVAC_KW.some(k => kwMatch(s, k)));
+  const hasPlumb  = lower.some(s => PLUMBING_KW.some(k => kwMatch(s, k)));
   if (hasHvac && hasPlumb) return 'combined';
   if (hasHvac)             return 'hvac';
   return 'plumbing'; // primary niche; safe default for ambiguous/empty services

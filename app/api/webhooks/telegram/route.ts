@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { sendContractorAgreement } from '@/lib/pandadoc';
+import { sendOnboardingBurst } from '@/lib/onboarding-burst';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const tg          = require('../../../../sales-manager/lib/telegram');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -170,7 +172,53 @@ export async function POST(req: NextRequest) {
         const { rows: [c] } = await pool.query(
           `UPDATE candidates SET status='offered', updated_at=NOW() WHERE id=$1 RETURNING name, email`, [id]
         );
-        await tg.sendToOwner(`✅ Offer approved for ${c?.name}. Send PandaDoc contract to ${c?.email}.`);
+        if (!c) return NextResponse.json({ ok: true });
+
+        // Auto-generate slug from name (e.g. "John Smith" → "johnsmith")
+        const baseSlug = c.name.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20);
+        const { rows: [slugCheck] } = await pool.query(
+          `SELECT COUNT(*) AS n FROM contractors WHERE slug LIKE $1`, [`${baseSlug}%`]
+        );
+        const slug = Number(slugCheck?.n) > 0 ? `${baseSlug}${Number(slugCheck.n) + 1}` : baseSlug;
+
+        // Create contractor record
+        const { rows: [contractor] } = await pool.query(
+          `INSERT INTO contractors (name, email, slug, commission_setup, commission_residual_pct)
+           VALUES ($1, $2, $3, 400, 10) RETURNING id`,
+          [c.name, c.email, slug]
+        );
+
+        // Send PandaDoc contract (auto if API key configured, manual fallback if not)
+        const result = await sendContractorAgreement({
+          contractorId: contractor.id,
+          name: c.name,
+          email: c.email,
+        });
+
+        // Telegram deep link — rep clicks this to connect their account
+        const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+        const deepLink    = botUsername
+          ? `https://t.me/${botUsername}?start=ctr_${contractor.id}`
+          : null;
+        const linkLine    = deepLink
+          ? `\n📱 <b>Forward this link to them so they connect Telegram:</b>\n${deepLink}`
+          : `\n⚠️ Set <code>TELEGRAM_BOT_USERNAME</code> in .env to auto-generate the Telegram link.`;
+
+        if (result.sent) {
+          await tg.sendToOwner(
+            `✅ <b>${c.name}</b> approved.\n\n` +
+            `Contract sent to ${c.email} via PandaDoc.\n` +
+            `Slug: <code>${slug}</code>${linkLine}\n\n` +
+            `Once they sign + click the Telegram link, onboarding fires automatically.`
+          );
+        } else {
+          await tg.sendToOwner(
+            `✅ <b>${c.name}</b> approved — contractor created (slug: <code>${slug}</code>).\n\n` +
+            `⚠️ PandaDoc auto-send failed: ${result.error}\n` +
+            `Send contract manually to <code>${c.email}</code> with metadata:\n` +
+            `<code>contractor_id: ${contractor.id}</code>${linkLine}`
+          );
+        }
       } else {
         await pool.query(`UPDATE candidates SET status='rejected', updated_at=NOW() WHERE id=$1`, [id]);
         await tg.sendToOwner('Candidate archived.');
@@ -230,6 +278,31 @@ export async function POST(req: NextRequest) {
       await saveCall(pool, chatId, isOwner, contractorId, activeSession, text);
       cs.clear(chatId);
       await tg.send(chatId, '✅ Call logged.');
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── /start ctr_UUID — rep connecting their Telegram account ──────
+    if (text.startsWith('/start ctr_')) {
+      const contractorId = text.slice('/start ctr_'.length).trim();
+      const { rows: [contractor] } = await pool.query(
+        `UPDATE contractors SET channel_id=$1, updated_at=NOW()
+         WHERE id=$2 AND channel_id IS NULL
+         RETURNING name, slug, commission_setup, commission_residual_pct, contract_signed_at`,
+        [chatId, contractorId]
+      );
+      if (!contractor) {
+        await tg.send(chatId, 'This link has already been used or is invalid. Contact your recruiter if you have an issue.');
+        return NextResponse.json({ ok: true });
+      }
+      if (contractor.contract_signed_at) {
+        // Signed before connecting Telegram — fire onboarding now
+        await sendOnboardingBurst({ ...contractor, channel_id: chatId });
+      } else {
+        await tg.send(chatId,
+          `✅ Connected, ${contractor.name.split(' ')[0]}!\n\n` +
+          `Check your email for the contract. Once you sign, I'll send your full onboarding — script, objection playbook, everything — right here.`
+        );
+      }
       return NextResponse.json({ ok: true });
     }
 

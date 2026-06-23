@@ -79,7 +79,7 @@ export default function ApplyForm() {
       <div>
         <label className="block text-sm text-zinc-400 mb-1">
           Audio recording link *
-          <span className="ml-2 text-zinc-600 font-normal">(Google Drive, Loom, or direct mp3/m4a)</span>
+          <span className="ml-2 text-zinc-600 font-normal">(Vocaroo, Loom, Google Drive, or any mp3/m4a link)</span>
         </label>
         <input
           required
