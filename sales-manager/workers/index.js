@@ -148,9 +148,9 @@ async function runMonitoring() {
             COALESCE(SUM(a.demos), 0)    AS total_demos,
             (SELECT COUNT(*) FROM commissions
              WHERE contractor_id = $1 AND type = 'setup'
-               AND created_at >= CURRENT_DATE - $2) AS total_closes
+               AND created_at >= CURRENT_DATE - ($2::int)) AS total_closes
           FROM rep_activity a
-          WHERE a.contractor_id = $1 AND a.date >= CURRENT_DATE - $2
+          WHERE a.contractor_id = $1 AND a.date >= CURRENT_DATE - ($2::int)
         `, [rep.id, days]);
 
         const connectRate = m.total_dials   > 0 ? (m.total_connects / m.total_dials) * 100 : null;
