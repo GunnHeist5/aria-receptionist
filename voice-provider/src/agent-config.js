@@ -5,16 +5,27 @@
  * Tune every provisioned agent's voice and call behavior here / via env — no
  * provider code changes needed.
  *
+ * What the Trillet agent-create API actually accepts (verified against the docs):
+ *   - llmModel  ∈ gpt-4o-mini | gpt-4o | gpt-4o-enterprise | gpt-4.1 |
+ *               gpt-4.1-mini(+ -enterprise) | gemini-2.5-flash | gemini-2.0-flash-001
+ *               (NO gpt-5, NO "flash lite" by name, NO fallback model field)
+ *   - ttsModel.provider ∈ openai | rime | elevenlabs | 11labs_byo | google
+ *   - settings ∈ { speed, volume, temperature }
+ *   STT, AI memory, persistent recall, and system-prompt toggles are NOT in the
+ *   agent API — set those as workspace defaults in the Trillet dashboard so every
+ *   created agent inherits them.
+ *
  * Env overrides (all optional; defaults match the prior hardcoded values):
  *   Voice / brain:
  *     TRILLET_TTS_PROVIDER          default 'rime'
  *     TRILLET_TTS_VOICE_ID          default 'mistv3_luna'
  *     TRILLET_TTS_LANGUAGE          default 'en'
- *     TRILLET_LLM_MODEL             default 'gemini-2.5-flash'
+ *     TRILLET_LLM_MODEL             default 'gemini-2.5-flash' (must be from the list above)
  *     TRILLET_SPEED                 default 0.95
- *     TRILLET_AGENT_SETTINGS_JSON   JSON merged into agent.settings — put any
- *                                   extra Trillet tuning here (interruption
- *                                   sensitivity, turn detection, responsiveness…)
+ *     TRILLET_VOLUME                only sent if set
+ *     TRILLET_TEMPERATURE           only sent if set
+ *     TRILLET_AGENT_SETTINGS_JSON   JSON merged into agent.settings — for any
+ *                                   field the dump reveals that we don't map above
  *   Call flow:
  *     TRILLET_MAX_CALL_DURATION     default 600  (seconds)
  *     TRILLET_END_CALL_ON_SILENCE   default 10   (seconds)
@@ -43,6 +54,8 @@ function agentDefaults() {
     llmModel: (process.env.TRILLET_LLM_MODEL || 'gemini-2.5-flash').trim(),
     settings: {
       speed: num(process.env.TRILLET_SPEED, 0.95),
+      ...(process.env.TRILLET_VOLUME      ? { volume:      num(process.env.TRILLET_VOLUME, 1) }        : {}),
+      ...(process.env.TRILLET_TEMPERATURE ? { temperature: num(process.env.TRILLET_TEMPERATURE, 0.7) } : {}),
       ...json(process.env.TRILLET_AGENT_SETTINGS_JSON),
     },
   };

@@ -24,13 +24,13 @@ async function main() {
   if (!id) { console.error('Usage: node --env-file=.env scripts/trillet-agent-dump.js <agentId>'); process.exit(1); }
 
   const agent = await req('/agents/' + id);
-  console.log('AGENT (voice / brain / settings):');
-  console.log(JSON.stringify({ name: agent.name, llmModel: agent.llmModel, ttsModel: agent.ttsModel, settings: agent.settings }, null, 2));
+  console.log('FULL AGENT OBJECT (every field Trillet stores):');
+  console.log(JSON.stringify(agent, null, 2));
 
   if (agent.pathway) {
     const flow = await req('/call-flows/' + agent.pathway);
-    console.log('\nCALL FLOW settings:');
-    console.log(JSON.stringify(flow.settings, null, 2));
+    console.log('\nFULL CALL FLOW OBJECT:');
+    console.log(JSON.stringify(flow, null, 2));
   }
 
   console.log('\nTip: copy ttsModel/voiceId/llmModel/speed into the TRILLET_* env vars, and any');
