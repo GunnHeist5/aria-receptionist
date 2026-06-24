@@ -364,6 +364,7 @@ export async function POST(req: NextRequest) {
           `<code>/reps</code> — active rep health status\n` +
           `<code>/candidates</code> — candidate pipeline\n` +
           `<code>/unactivated</code> — live clients still awaiting forwarding confirmation\n` +
+          `<code>/number [clientId] [+number]</code> — finalize a client after buying its number\n` +
           `<code>/activate [name]</code> — mark client forwarding confirmed\n` +
           `<code>/log 80 12 3</code> — daily totals (dials/connects/demos)\n` +
           `<code>/stats</code> — your numbers\n` +
@@ -436,6 +437,45 @@ export async function POST(req: NextRequest) {
             `• <b>${r.business_name}</b> (${r.city}, ${r.state}) — day ${r.days_live ?? 0}\n  ${r.forward_to_number} · ${r.carrier || 'carrier unknown'}`
           ).join('\n');
           await tg.sendToOwner(`📋 <b>Live clients awaiting forwarding confirmation (${rows.length})</b>\n\n${lines}\n\nReply /activate [name] once they text back.`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Finalize a paused client after you've bought + attached its number in
+      // the Trillet dashboard. Same logic as scripts/resume-provisioning.js.
+      if (text.startsWith('/number')) {
+        const parts    = text.trim().split(/\s+/);
+        const clientId = parts[1];
+        const number   = parts[2];
+        if (!clientId || !number || !/^\+\d{6,}$/.test(number)) {
+          await tg.sendToOwner('Usage: <code>/number CLIENT_ID +1XXXXXXXXXX</code>\nUse this after you buy + attach the number in the Trillet dashboard.');
+          return NextResponse.json({ ok: true });
+        }
+        try {
+          const { rows: [c] } = await pool.query('SELECT id, business_name FROM clients WHERE id=$1', [clientId]);
+          if (!c) { await tg.sendToOwner('No client with that id.'); return NextResponse.json({ ok: true }); }
+
+          await pool.query('UPDATE clients SET provisioned_number=$2 WHERE id=$1', [clientId, number]);
+
+          // Load pipeline + provider directly — the index.js wrappers call
+          // require('dotenv'), which we avoid inside the Next.js runtime.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { runPipeline } = require('../../../../onboarding/src/pipeline');
+          const impl = (process.env.VOICE_PROVIDER || 'mock').toLowerCase().trim();
+          const provider = impl === 'trillet'
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            ? new (require('../../../../voice-provider/src/trillet.provider').TrilletVoiceProvider)()
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            : new (require('../../../../voice-provider/src/mock.provider').MockVoiceProvider)();
+
+          const { paused } = await runPipeline(clientId, { db: pool, provider });
+          const { rows: [a] } = await pool.query('SELECT status, provisioned_number FROM clients WHERE id=$1', [clientId]);
+          const first = c.business_name.split(' ')[0].toLowerCase();
+          await tg.sendToOwner(paused
+            ? `⏸ <b>${c.business_name}</b>: still paused — re-check the number/agent and try again.`
+            : `✅ <b>${c.business_name}</b> finalized.\nNumber: <code>${a.provisioned_number}</code> · status: ${a.status}\n\nText them their forwarding SMS, then reply <code>/activate ${first}</code> once they confirm forwarding.`);
+        } catch (err: unknown) {
+          await tg.sendToOwner(`Resume failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         return NextResponse.json({ ok: true });
       }

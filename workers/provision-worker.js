@@ -107,15 +107,17 @@ async function notifyOwnerClientLive(pool, clientId) {
     `📍 ${c.city}, ${c.state}\n\n` +
     `<b>Trillet setup:</b>\n` +
     `• Area code: <code>${areaCode}</code>\n` +
+    `• Agent id: <code>${c.voice_provider_account_id || '(none)'}</code>\n` +
     `• Forward calls to: <code>${c.forward_to_number}</code>\n` +
     `• Carrier: ${c.carrier_name || c.carrier || 'unknown'}\n` +
     `• Tone: ${c.tone || 'professional'}\n` +
     `• After hours: ${c.after_hours_behavior || 'voicemail'}\n\n` +
     `<b>Steps:</b>\n` +
-    `1. Buy a number in area code ${areaCode} in Trillet dashboard\n` +
-    `2. Attach it to the ${c.business_name} agent\n` +
-    `3. Replace [INSERT AI NUMBER HERE] below and text the client\n` +
-    `4. Reply /activate ${c.business_name.split(' ')[0].toLowerCase()} once they confirm forwarding\n\n` +
+    `1. Buy a number in area code ${areaCode} (Trillet dashboard)\n` +
+    `2. Attach it to the agent id above\n` +
+    `3. Finalize right here — tap to copy, then add the number:\n   <code>/number ${c.id} </code>+1XXXXXXXXXX\n` +
+    `4. Text the client their forwarding SMS (below)\n` +
+    `5. Reply <code>/activate ${c.business_name.split(' ')[0].toLowerCase()}</code> once they confirm forwarding\n\n` +
     `<b>📱 Client SMS (copy-paste, fill in number first):</b>\n` +
     `<pre>${smsCopy.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
 
