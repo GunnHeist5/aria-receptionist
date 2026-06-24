@@ -1,71 +1,79 @@
 'use strict';
 
 /**
- * Central, env-configurable agent voice + call settings for Trillet.
- * Tune every provisioned agent's voice and call behavior here / via env — no
- * provider code changes needed.
+ * Central, env-configurable agent voice / model / call settings for Trillet.
+ * Defaults below mirror the hand-tuned reference agent (6a3c1dbf12765e2e058fd96d).
+ * Adjust any value here or via the matching env var — every new agent the
+ * pipeline creates picks it up.
  *
- * What the Trillet agent-create API actually accepts (verified against the docs):
- *   - llmModel  ∈ gpt-4o-mini | gpt-4o | gpt-4o-enterprise | gpt-4.1 |
- *               gpt-4.1-mini(+ -enterprise) | gemini-2.5-flash | gemini-2.0-flash-001
- *               (NO gpt-5, NO "flash lite" by name, NO fallback model field)
- *   - ttsModel.provider ∈ openai | rime | elevenlabs | 11labs_byo | google
- *   - settings ∈ { speed, volume, temperature }
- *   STT, AI memory, persistent recall, and system-prompt toggles are NOT in the
- *   agent API — set those as workspace defaults in the Trillet dashboard so every
- *   created agent inherits them.
+ * AGENT-LEVEL (sent to POST /agents):
+ *   ttsModel             voice           — TRILLET_TTS_VOICE_ID / _PROVIDER / _LANGUAGE / _RIME_MODEL
+ *   llmModel             primary brain   — TRILLET_LLM_MODEL          (e.g. gpt-5.1-chat-latest)
+ *   fallbackLlmModel     fallback brain  — TRILLET_FALLBACK_LLM_MODEL (e.g. gemini-3.1-flash-lite)
+ *   sttProvider.id       primary STT     — TRILLET_STT_ID             (e.g. deepgram-flux-multi)
+ *   fallbackSttProvider  fallback STT    — TRILLET_FALLBACK_STT_ID    (e.g. deepgram-nova-3)
+ *   settings             speed/volume/temperature
  *
- * Env overrides (all optional; defaults match the prior hardcoded values):
- *   Voice / brain:
- *     TRILLET_TTS_PROVIDER          default 'rime'
- *     TRILLET_TTS_VOICE_ID          default 'mistv3_luna'
- *     TRILLET_TTS_LANGUAGE          default 'en'
- *     TRILLET_LLM_MODEL             default 'gemini-2.5-flash' (must be from the list above)
- *     TRILLET_SPEED                 default 0.95
- *     TRILLET_VOLUME                only sent if set
- *     TRILLET_TEMPERATURE           only sent if set
- *     TRILLET_AGENT_SETTINGS_JSON   JSON merged into agent.settings — for any
- *                                   field the dump reveals that we don't map above
- *   Call flow:
- *     TRILLET_MAX_CALL_DURATION     default 600  (seconds)
- *     TRILLET_END_CALL_ON_SILENCE   default 10   (seconds)
- *     TRILLET_CALL_SETTINGS_JSON    JSON merged into callFlow.settings.callSetting
- *
- * To discover exact field names Trillet supports for the JSON knobs, tune one
- * agent perfectly in the dashboard, then run scripts/trillet-agent-dump.js to
- * print its config and copy the values here.
+ * CALL-FLOW-LEVEL (sent to /call-flows in applyContentPack):
+ *   enableHumanLikeVoiceAndTone, enableTransferInstructions, utilizePriorCallsContext,
+ *   identifierBasedWebDemoMemory, speechSetting (responsiveness/interruption/turn),
+ *   callSetting (max duration / end-on-silence).
  */
 
-function num(v, d) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
-
+function num(v, d)  { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
+function bool(v, d) { if (v === undefined || v === '') return d; return /^(1|true|yes|on)$/i.test(String(v).trim()); }
 function json(v) {
   if (!v) return {};
   try { const o = JSON.parse(v); return (o && typeof o === 'object') ? o : {}; }
   catch { console.error('[agent-config] ignoring invalid JSON env value:', String(v).slice(0, 60)); return {}; }
 }
 
+// ── Agent-level config (POST /agents) ──────────────────────────────────────
 function agentDefaults() {
   return {
     ttsModel: {
-      provider: (process.env.TRILLET_TTS_PROVIDER || 'rime').trim(),
-      voiceId:  (process.env.TRILLET_TTS_VOICE_ID || 'mistv3_luna').trim(),
-      language: (process.env.TRILLET_TTS_LANGUAGE || 'en').trim(),
+      provider:  (process.env.TRILLET_TTS_PROVIDER || 'rime').trim(),
+      voiceId:   (process.env.TRILLET_TTS_VOICE_ID || 'mistv3_astra').trim(),
+      language:  (process.env.TRILLET_TTS_LANGUAGE || 'en').trim(),
+      rimeModel: (process.env.TRILLET_RIME_MODEL   || 'mistv3').trim(),
     },
-    llmModel: (process.env.TRILLET_LLM_MODEL || 'gemini-2.5-flash').trim(),
+    llmModel:         (process.env.TRILLET_LLM_MODEL          || 'gpt-5.1-chat-latest').trim(),
+    fallbackLlmModel: (process.env.TRILLET_FALLBACK_LLM_MODEL || 'gemini-3.1-flash-lite').trim(),
+    sttProvider:         { id: (process.env.TRILLET_STT_ID          || 'deepgram-flux-multi').trim() },
+    fallbackSttProvider: { id: (process.env.TRILLET_FALLBACK_STT_ID || 'deepgram-nova-3').trim() },
     settings: {
-      speed: num(process.env.TRILLET_SPEED, 0.95),
-      ...(process.env.TRILLET_VOLUME      ? { volume:      num(process.env.TRILLET_VOLUME, 1) }        : {}),
-      ...(process.env.TRILLET_TEMPERATURE ? { temperature: num(process.env.TRILLET_TEMPERATURE, 0.7) } : {}),
+      speed:       num(process.env.TRILLET_SPEED, 1.06),
+      volume:      num(process.env.TRILLET_VOLUME, 1),
+      temperature: num(process.env.TRILLET_TEMPERATURE, 0.3),
       ...json(process.env.TRILLET_AGENT_SETTINGS_JSON),
     },
   };
 }
 
+// ── Call-flow-level settings (applyContentPack → /call-flows) ──────────────
 function callFlowSettings() {
   return {
+    enableHumanLikeVoiceAndTone:  bool(process.env.TRILLET_HUMANLIKE_TONE, true),
+    enableTransferInstructions:   bool(process.env.TRILLET_TRANSFER_INSTRUCTIONS, true),
+    enableEndCallInstructions:    true,
+    allowAgentHangUp:             true,
+    utilizePriorCallsContext:     bool(process.env.TRILLET_PRIOR_CALLS_CONTEXT, true),
+    identifierBasedWebDemoMemory: bool(process.env.TRILLET_WEB_DEMO_MEMORY, true),
+    timeContextEnabled:           true,
+    fasterInboundPickup:          true,
+    enableRecording:              true,
+    speechSetting: {
+      responsiveness:             num(process.env.TRILLET_RESPONSIVENESS, 10),
+      interruptionSensitivity:    num(process.env.TRILLET_INTERRUPTION_SENSITIVITY, 5.5),
+      minimumConsecutiveSpeech:   num(process.env.TRILLET_MIN_CONSECUTIVE_SPEECH, 0.5),
+      vadModel:                   'stt',
+      enablePreemptiveGeneration: false,
+    },
     callSetting: {
-      maxCallDuration:  num(process.env.TRILLET_MAX_CALL_DURATION, 600),
-      endCallOnSilence: num(process.env.TRILLET_END_CALL_ON_SILENCE, 10),
+      maxCallDuration:            num(process.env.TRILLET_MAX_CALL_DURATION, 1800),
+      endCallOnSilence:           num(process.env.TRILLET_END_CALL_ON_SILENCE, 10),
+      enableLlmCache:             true,
+      enableComplianceMonitoring: true,
       ...json(process.env.TRILLET_CALL_SETTINGS_JSON),
     },
   };
