@@ -30,7 +30,9 @@ const dotenv = require(path.join(__dirname, '../voice-provider/node_modules/dote
 // Load env in priority order: root .env > worker overrides > voice-provider creds > db URL
 // On the VPS a single /var/www/aria/.env holds all secrets.
 // Locally each sub-package has its own .env — all four are checked so neither breaks.
-dotenv.config({ path: path.join(__dirname, '../.env') });
+// override:true so the .env file wins over any stale value PM2 has cached in the
+// process environment (e.g. a VOICE_PROVIDER=mock left over from an earlier start).
+dotenv.config({ path: path.join(__dirname, '../.env'), override: true });
 dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config({ path: path.join(__dirname, '../voice-provider/.env') });
 dotenv.config({ path: path.join(__dirname, '../ai-receptionist-db/.env') });
