@@ -25,14 +25,7 @@
  */
 
 const { VoiceProvider, VoiceProviderError } = require('./interface');
-
-// Defaults applied when creating a new Trillet agent.
-// Change these here only — never hard-code elsewhere.
-const AGENT_DEFAULTS = {
-  ttsModel: { provider: 'rime', voiceId: 'mistv3_luna', language: 'en' },
-  llmModel: 'gemini-2.5-flash',
-  settings: { speed: 0.95 },
-};
+const { agentDefaults, callFlowSettings } = require('./agent-config');
 
 // Trillet's PUT /agents/:id is a full replace, not PATCH.
 // Only send fields Trillet accepts as writable; sending read-only fields
@@ -59,6 +52,9 @@ class TrilletVoiceProvider extends VoiceProvider {
         'Run scripts/trillet-probe.js to discover and save it.'
       );
     }
+    // Real Trillet does NOT auto-buy numbers (API purchases don't wire LiveKit
+    // inbound routing). The pipeline pauses for a manual dashboard purchase.
+    this.autoProvisionsNumber = false;
     /** @private */ this._key  = process.env.TRILLET_API_KEY;
     /** @private */ this._wid  = process.env.TRILLET_WORKSPACE_ID;
     /** @private */ this._base = (process.env.TRILLET_API_BASE_URL || 'https://api.trillet.ai/v1')
@@ -141,7 +137,7 @@ class TrilletVoiceProvider extends VoiceProvider {
     try {
       const body = {
         name: clientConfig.businessName,
-        ...AGENT_DEFAULTS,
+        ...agentDefaults(),
       };
       // If the business has a website, pass it so Trillet can scrape it for
       // additional knowledge (opening hours from Google, service descriptions, etc.).
@@ -255,9 +251,7 @@ class TrilletVoiceProvider extends VoiceProvider {
         welcomeMessage:       'ai_custom',
         customWelcomeMessage: pack.greeting,
         agent:                accountId,
-        settings: {
-          callSetting: { maxCallDuration: 600, endCallOnSilence: 10 },
-        },
+        settings:             callFlowSettings(),
       };
 
       let flow;

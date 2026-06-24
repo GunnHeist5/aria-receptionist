@@ -141,8 +141,12 @@ async function runCycle(pool, provider) {
   process.stdout.write(`[worker] claimed  ${tag}\n`);
 
   try {
-    const { runId } = await runOnboarding(client.id, { db: pool, provider });
-    process.stdout.write(`[worker] ✓ live   ${tag}  run=${runId}\n`);
+    const { runId, paused } = await runOnboarding(client.id, { db: pool, provider });
+    process.stdout.write(paused
+      ? `[worker] ⏸ ${tag} agent built — awaiting manual number (run=${runId})\n`
+      : `[worker] ✓ live   ${tag}  run=${runId}\n`);
+    // The owner notification carries the manual buy/attach steps either way.
+    // On pause the client stays 'provisioning' until resumed; the worker won't re-claim it.
     await notifyOwnerClientLive(pool, client.id).catch(e =>
       process.stderr.write(`[worker] notify failed: ${e.message}\n`)
     );

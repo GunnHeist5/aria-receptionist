@@ -73,6 +73,10 @@ class MockVoiceProvider extends VoiceProvider {
   constructor() {
     super();
 
+    // Mock auto-provisions a (fake) number so dev/test pipelines complete without
+    // the manual-number pause that the real Trillet provider requires.
+    this.autoProvisionsNumber = true;
+
     /**
      * All accounts, keyed by accountId.
      * Each entry shape:

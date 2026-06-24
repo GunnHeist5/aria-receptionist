@@ -51,18 +51,19 @@ async function main() {
 
   try {
     const provider = new TrilletVoiceProvider();          // force Trillet for THIS run only
-    const { runId } = await runOnboarding(client.id, { db: pool, provider });
+    const { runId, paused } = await runOnboarding(client.id, { db: pool, provider });
     const { rows: [a] } = await pool.query(
       'SELECT voice_provider_account_id, content_pack_version, status FROM clients WHERE id=$1', [client.id]);
 
-    console.log(`\n✅ Provisioned (run ${runId})`);
+    console.log(`\n✅ Agent built (run ${runId}) — ${paused ? 'PAUSED for the manual number step' : 'status ' + a.status}`);
     console.log(`   Trillet agent id: ${a.voice_provider_account_id}`);
     console.log(`   Content pack:     ${a.content_pack_version}`);
     console.log(`   Client status:    ${a.status}`);
-    console.log('\nNEXT (manual — this is the real inbound test):');
+    console.log('\nNEXT (manual — the real inbound test):');
     console.log('   1. Trillet dashboard -> buy a number -> ATTACH it to the agent id above.');
-    console.log('   2. Call that number from your phone. Confirm the AI answers and talks.');
-    console.log(`   3. Tear down:  node --env-file=.env scripts/deprovision-test.js ${client.id} --yes`);
+    console.log(`   2. Resume:     node --env-file=.env scripts/resume-provisioning.js ${client.id} +1THENUMBER`);
+    console.log('   3. Call that number from your phone. Confirm the AI answers and talks.');
+    console.log(`   4. Tear down:  node --env-file=.env scripts/deprovision-test.js ${client.id} --yes`);
   } catch (err) {
     console.error(`\n✗ Provisioning failed: ${err.message}`);
     await pool.query(`UPDATE clients SET status='failed' WHERE id=$1`, [client.id]);

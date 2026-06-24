@@ -1,45 +1,51 @@
 'use strict';
 
+const { ManualNumberPause } = require('../manual-pause');
+
 const STEP_KEY = 'provision_number';
 
 /**
- * Step 2 — Provision a phone number on the client's voice provider sub-account.
+ * Step — Provision (or manually gate) the agent's phone number.
  *
- * Area code preference: derived from the client's own phone number (first 3 digits
- * after +1). Falls back gracefully if the number can't be parsed.
+ * Trillet LiveKit bug: API-key purchases don't wire LiveKit inbound routing, so
+ * for the REAL provider we do NOT auto-buy. Instead:
+ *   • If clients.provisioned_number is already set (the owner bought + attached a
+ *     number in the dashboard and recorded it via resume) → proceed.
+ *   • Otherwise → throw ManualNumberPause, which the pipeline turns into a clean
+ *     PAUSE: the agent is left fully built + configured, waiting for the manual
+ *     number step, and the run stays resumable.
  *
- * DB writes on success:
- *   clients.provisioned_number        = E.164 phone number
- *   clients.provisioning_checkpoint   = { step, phoneNumber }
+ * The mock provider (autoProvisionsNumber=true) and AUTO_PURCHASE_NUMBER=true
+ * take the auto-buy path instead, so dev/test and any future fixed/BYOD flow
+ * complete without pausing.
  *
  * @param {{ client: object, provider: import('../../../voice-provider/src/interface').VoiceProvider }} opts
  * @returns {Promise<import('../pipeline').StepResult>}
  */
 async function provisionNumber({ client, provider }) {
-  // ── LiveKit-wiring bug: API-key number purchases do NOT trigger Trillet's
-  // LiveKit inbound trunk / dispatch-rule creation, so an API-bought number
-  // accepts no inbound calls even though the purchase + agent-link succeed
-  // (confirmed empirically). Only a DASHBOARD purchase wires LiveKit correctly.
-  // So by default we DO NOT auto-buy — the number is bought + attached manually
-  // in the Trillet dashboard (the owner Telegram notification carries the steps).
-  // Set AUTO_PURCHASE_NUMBER=true only after Trillet fixes this, or for a BYOD
-  // register-external-number flow that wires LiveKit itself. ───────────────────
-  if ((process.env.AUTO_PURCHASE_NUMBER || 'false').toLowerCase() !== 'true') {
-    return {
-      stepKey: STEP_KEY,
-      skipped: true,
-      skipReason:
-        'Manual number purchase required — API-key buys do not wire LiveKit inbound ' +
-        'routing (dead number). Buy + attach the number in the Trillet dashboard.',
-      clientUpdates: {},
-      eventPayload: { step: STEP_KEY, mode: 'manual_dashboard_purchase' },
-    };
+  const autoBuy =
+    (provider && provider.autoProvisionsNumber === true) ||
+    (process.env.AUTO_PURCHASE_NUMBER || '').toLowerCase() === 'true';
+
+  // ── Manual-number mode (real Trillet, default) ─────────────────────────────
+  if (!autoBuy) {
+    if (client.provisioned_number) {
+      // Number was bought + attached in the dashboard and recorded on resume.
+      return {
+        stepKey: STEP_KEY,
+        clientUpdates: {
+          provisioning_checkpoint: JSON.stringify({ step: STEP_KEY, phoneNumber: client.provisioned_number, mode: 'manual' }),
+        },
+        eventPayload: { step: STEP_KEY, phoneNumber: client.provisioned_number, mode: 'manual', resumed: true },
+      };
+    }
+    throw new ManualNumberPause(
+      'Awaiting manual number — buy a number in the Trillet dashboard, attach it to the agent, ' +
+      'then resume: scripts/resume-provisioning.js <clientId> <+E164>.'
+    );
   }
 
-  // Prefer the explicit areaCode stored in service_area (set by intake form).
-  // Fall back to deriving from the client's own phone number.
-  // For US numbers: strip non-digits, take the last 10 digits, first 3 = area code.
-  //   '+15125550100' → '15125550100' → last 10 → '5125550100' → slice 0-3 → '512'
+  // ── Auto-buy path (mock, or AUTO_PURCHASE_NUMBER=true) ─────────────────────
   const serviceArea = (typeof client.service_area === 'object' && client.service_area) || {};
   const digits      = String(client.phone || '').replace(/\D/g, '');
   const areaCode    = serviceArea.areaCode
@@ -53,16 +59,10 @@ async function provisionNumber({ client, provider }) {
   return {
     stepKey: STEP_KEY,
     clientUpdates: {
-      provisioned_number:        phoneNumber,
-      provisioning_checkpoint:   JSON.stringify({ step: STEP_KEY, phoneNumber, numberId }),
+      provisioned_number:      phoneNumber,
+      provisioning_checkpoint: JSON.stringify({ step: STEP_KEY, phoneNumber, numberId }),
     },
-    eventPayload: {
-      step:        STEP_KEY,
-      phoneNumber,
-      numberId,
-      areaCodeHint: areaCode,
-      _raw:         raw,
-    },
+    eventPayload: { step: STEP_KEY, phoneNumber, numberId, areaCodeHint: areaCode, _raw: raw },
   };
 }
 

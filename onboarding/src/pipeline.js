@@ -29,6 +29,7 @@
  */
 
 const { VoiceProviderError }  = require('../../voice-provider/src/interface');
+const { ManualNumberPause }   = require('./manual-pause');
 const { createAccount }       = require('./steps/01-create-account');
 const { provisionNumber }     = require('./steps/02-provision-number');
 const { applyContentPack }    = require('./steps/03-apply-content-pack');
@@ -44,13 +45,17 @@ const { activate }            = require('./steps/05-activate');
  * @property {string}   [skipReason]    — human-readable reason for the skip
  */
 
-/** Step registry — order is execution order. */
+/**
+ * Step registry — order is execution order.
+ * Content pack is applied BEFORE the number so the agent is fully built and
+ * configured when provision_number pauses for the manual dashboard purchase.
+ */
 const STEPS = [
-  { key: 'create_account',    fn: createAccount    },
-  { key: 'provision_number',  fn: provisionNumber  },
+  { key: 'create_account',     fn: createAccount    },
   { key: 'apply_content_pack', fn: applyContentPack },
-  { key: 'run_test_call',     fn: runTestCall       },
-  { key: 'activate',          fn: activate          },
+  { key: 'provision_number',   fn: provisionNumber  },
+  { key: 'run_test_call',      fn: runTestCall       },
+  { key: 'activate',           fn: activate          },
 ];
 
 // ---------------------------------------------------------------------------
@@ -223,6 +228,15 @@ async function runPipeline(clientId, { db, provider }) {
         process.stdout.write(`[onboarding]   done   ${key}\n`);
       }
     } catch (err) {
+      // Clean PAUSE for the manual number step — NOT a failure. Leave the run
+      // 'running' (resumable) and the client 'provisioning' (the worker only
+      // claims 'won', so it won't re-grab it). Resume finishes the remaining steps.
+      if (err instanceof ManualNumberPause || err?.isManualPause) {
+        await dbWriteEvent(db, clientId, { step: key, status: 'awaiting_manual_number', note: err.message });
+        process.stdout.write(`[onboarding]   PAUSE  ${key}: ${err.message}\n`);
+        return { runId: run.id, paused: true, pausedStep: key };
+      }
+
       const msg = err instanceof Error ? err.message : String(err);
       process.stdout.write(`[onboarding]   FAILED ${key}: ${msg}\n`);
 
@@ -241,7 +255,7 @@ async function runPipeline(clientId, { db, provider }) {
   await dbMarkRunCompleted(db, run.id, lastKey || STEPS[STEPS.length - 1].key);
   process.stdout.write(`[onboarding] pipeline complete for client ${clientId}\n`);
 
-  return { runId: run.id };
+  return { runId: run.id, paused: false };
 }
 
 module.exports = { runPipeline, STEPS };
