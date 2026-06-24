@@ -69,9 +69,16 @@ function callFlowSettings() {
       vadModel:                   'stt',
       enablePreemptiveGeneration: false,
     },
+    // Trillet REPLACES (not merges) flow settings, so we must re-include the
+    // default tools or the agent loses them. end_call lets it hang up cleanly.
+    tools: [
+      { name: 'end_call', description: 'End the current call with a farewell message', enabled: true },
+      { name: 'get_time_for_timezone', description: 'Get the current time for a specific timezone', enabled: true, locations: ['America/New_York'] },
+    ],
     callSetting: {
       maxCallDuration:            num(process.env.TRILLET_MAX_CALL_DURATION, 1800),
       endCallOnSilence:           num(process.env.TRILLET_END_CALL_ON_SILENCE, 10),
+      postCallAnalysisModel:      (process.env.TRILLET_POST_CALL_MODEL || 'gemini-2.5-flash').trim(),
       enableLlmCache:             true,
       enableComplianceMonitoring: true,
       ...json(process.env.TRILLET_CALL_SETTINGS_JSON),
