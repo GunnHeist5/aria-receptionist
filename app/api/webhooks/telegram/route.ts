@@ -103,6 +103,42 @@ async function buildInsights(pool: any, contractorId: string | null, isOwner: bo
 ${noteLines}`;
 }
 
+// ── Finalize a paused client with the number the owner bought ──────────────
+async function finalizeClientNumber(pool: any, clientId: string, number: string): Promise<string> {
+  const { rows: [c] } = await pool.query('SELECT id, business_name FROM clients WHERE id=$1', [clientId]);
+  if (!c) return 'No client with that id.';
+  await pool.query('UPDATE clients SET provisioned_number=$2 WHERE id=$1', [clientId, number]);
+
+  // Load the pipeline + provider directly — the index.js wrappers call
+  // require('dotenv'), which we avoid inside the Next.js runtime.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { runPipeline } = require('../../../../onboarding/src/pipeline');
+  const impl = (process.env.VOICE_PROVIDER || 'mock').toLowerCase().trim();
+  const provider = impl === 'trillet'
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    ? new (require('../../../../voice-provider/src/trillet.provider').TrilletVoiceProvider)()
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    : new (require('../../../../voice-provider/src/mock.provider').MockVoiceProvider)();
+
+  const { paused } = await runPipeline(clientId, { db: pool, provider });
+  const { rows: [a] } = await pool.query('SELECT status, provisioned_number FROM clients WHERE id=$1', [clientId]);
+  const first = c.business_name.split(' ')[0].toLowerCase();
+  return paused
+    ? `⏸ <b>${c.business_name}</b>: still paused — re-check the number/agent and try again.`
+    : `✅ <b>${c.business_name}</b> finalized — <b>live</b>.\nNumber: <code>${a.provisioned_number}</code>\n\nText them their forwarding SMS, then reply <code>/activate ${first}</code> once they confirm.`;
+}
+
+/** Normalize a bare phone reply to E.164, or null if the text isn't clearly a number. */
+function normNumber(text: string): string | null {
+  const t = text.trim();
+  if (!/^\+?[\d\s().\-]{7,}$/.test(t)) return null;
+  const digits = t.replace(/\D/g, '');
+  if (t.startsWith('+') && digits.length >= 7) return '+' + digits;
+  if (digits.length === 10) return '+1' + digits;
+  if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;
+  return null;
+}
+
 // ── Main handler ───────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -446,37 +482,13 @@ export async function POST(req: NextRequest) {
       if (text.startsWith('/number')) {
         const parts    = text.trim().split(/\s+/);
         const clientId = parts[1];
-        const number   = parts[2];
-        if (!clientId || !number || !/^\+\d{6,}$/.test(number)) {
-          await tg.sendToOwner('Usage: <code>/number CLIENT_ID +1XXXXXXXXXX</code>\nUse this after you buy + attach the number in the Trillet dashboard.');
+        const number   = normNumber(parts.slice(2).join(' '));
+        if (!clientId || !number) {
+          await tg.sendToOwner('Usage: <code>/number CLIENT_ID +1XXXXXXXXXX</code>\n…or just reply with the number on its own and I\'ll apply it to the client awaiting finalization.');
           return NextResponse.json({ ok: true });
         }
-        try {
-          const { rows: [c] } = await pool.query('SELECT id, business_name FROM clients WHERE id=$1', [clientId]);
-          if (!c) { await tg.sendToOwner('No client with that id.'); return NextResponse.json({ ok: true }); }
-
-          await pool.query('UPDATE clients SET provisioned_number=$2 WHERE id=$1', [clientId, number]);
-
-          // Load pipeline + provider directly — the index.js wrappers call
-          // require('dotenv'), which we avoid inside the Next.js runtime.
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { runPipeline } = require('../../../../onboarding/src/pipeline');
-          const impl = (process.env.VOICE_PROVIDER || 'mock').toLowerCase().trim();
-          const provider = impl === 'trillet'
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            ? new (require('../../../../voice-provider/src/trillet.provider').TrilletVoiceProvider)()
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            : new (require('../../../../voice-provider/src/mock.provider').MockVoiceProvider)();
-
-          const { paused } = await runPipeline(clientId, { db: pool, provider });
-          const { rows: [a] } = await pool.query('SELECT status, provisioned_number FROM clients WHERE id=$1', [clientId]);
-          const first = c.business_name.split(' ')[0].toLowerCase();
-          await tg.sendToOwner(paused
-            ? `⏸ <b>${c.business_name}</b>: still paused — re-check the number/agent and try again.`
-            : `✅ <b>${c.business_name}</b> finalized.\nNumber: <code>${a.provisioned_number}</code> · status: ${a.status}\n\nText them their forwarding SMS, then reply <code>/activate ${first}</code> once they confirm forwarding.`);
-        } catch (err: unknown) {
-          await tg.sendToOwner(`Resume failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        try { await tg.sendToOwner(await finalizeClientNumber(pool, clientId, number)); }
+        catch (err: unknown) { await tg.sendToOwner(`Finalize failed: ${err instanceof Error ? err.message : String(err)}`); }
         return NextResponse.json({ ok: true });
       }
 
@@ -504,6 +516,30 @@ export async function POST(req: NextRequest) {
             [c.id]
           );
           await tg.sendToOwner(`✅ <b>${c.business_name}</b> marked as forwarding confirmed. They're fully live!`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Bare number reply — finalize the client awaiting a number, no clientId needed.
+      const bare = normNumber(text);
+      if (bare) {
+        try {
+          const { rows: waiting } = await pool.query(
+            `SELECT id, business_name FROM clients
+             WHERE voice_provider_account_id IS NOT NULL AND provisioned_number IS NULL
+               AND status NOT IN ('live','churned')
+             ORDER BY updated_at DESC`
+          );
+          if (waiting.length === 0) {
+            await tg.sendToOwner('No client is awaiting a number right now.\nTo finalize a specific one: <code>/number CLIENT_ID +1XXXXXXXXXX</code>');
+          } else if (waiting.length === 1) {
+            await tg.sendToOwner(await finalizeClientNumber(pool, waiting[0].id, bare));
+          } else {
+            const lines = waiting.map((c: any) => `• <b>${c.business_name}</b>\n  <code>/number ${c.id} ${bare}</code>`).join('\n');
+            await tg.sendToOwner(`Several clients are awaiting numbers — tap the right one to copy + send:\n\n${lines}`);
+          }
+        } catch (err: unknown) {
+          await tg.sendToOwner(`Finalize failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         return NextResponse.json({ ok: true });
       }
