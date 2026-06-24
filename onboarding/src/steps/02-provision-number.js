@@ -16,6 +16,26 @@ const STEP_KEY = 'provision_number';
  * @returns {Promise<import('../pipeline').StepResult>}
  */
 async function provisionNumber({ client, provider }) {
+  // ── LiveKit-wiring bug: API-key number purchases do NOT trigger Trillet's
+  // LiveKit inbound trunk / dispatch-rule creation, so an API-bought number
+  // accepts no inbound calls even though the purchase + agent-link succeed
+  // (confirmed empirically). Only a DASHBOARD purchase wires LiveKit correctly.
+  // So by default we DO NOT auto-buy — the number is bought + attached manually
+  // in the Trillet dashboard (the owner Telegram notification carries the steps).
+  // Set AUTO_PURCHASE_NUMBER=true only after Trillet fixes this, or for a BYOD
+  // register-external-number flow that wires LiveKit itself. ───────────────────
+  if ((process.env.AUTO_PURCHASE_NUMBER || 'false').toLowerCase() !== 'true') {
+    return {
+      stepKey: STEP_KEY,
+      skipped: true,
+      skipReason:
+        'Manual number purchase required — API-key buys do not wire LiveKit inbound ' +
+        'routing (dead number). Buy + attach the number in the Trillet dashboard.',
+      clientUpdates: {},
+      eventPayload: { step: STEP_KEY, mode: 'manual_dashboard_purchase' },
+    };
+  }
+
   // Prefer the explicit areaCode stored in service_area (set by intake form).
   // Fall back to deriving from the client's own phone number.
   // For US numbers: strip non-digits, take the last 10 digits, first 3 = area code.
