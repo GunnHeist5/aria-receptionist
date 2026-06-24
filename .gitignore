@@ -36,6 +36,5 @@ Thumbs.db
 # Overnight workflow logs (keep the .md reports, drop raw logs)
 overnight/reports/*.log
 
-# Overnight queue task specs (they move between queue/done/failed; the reports are the durable record)
-overnight/queue/*.md
-overnight/queue/**/*.md
+# NOTE: queue task specs (overnight/queue/**/*.md) ARE committed on purpose —
+# the cloud routine clones from GitHub, so tasks must be in the repo to be seen.
