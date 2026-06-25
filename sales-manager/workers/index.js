@@ -173,7 +173,7 @@ async function runMonitoring() {
             (contractor_id, period_type, period_start, period_end,
              total_dials, total_connects, total_demos, total_closes,
              connect_rate, demo_rate, close_rate, health_status, flags)
-          VALUES ($1, $2, CURRENT_DATE - $3, CURRENT_DATE,
+          VALUES ($1, $2, CURRENT_DATE - ($3::int), CURRENT_DATE,
                   $4, $5, $6, $7, $8, $9, $10, $11, $12)
         `, [rep.id, label, days, m.total_dials, m.total_connects, m.total_demos, m.total_closes,
             connectRate, demoRate, closeRate, health, JSON.stringify(flags_)]);
