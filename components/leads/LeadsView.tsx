@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 
 type Lead = {
   id: string;
@@ -17,16 +17,16 @@ type Lead = {
 type Filter = 'new' | 'callback' | 'interested' | 'all';
 
 const STATUS_LABEL: Record<string, string> = {
-  new:          'New',
-  interested:   'Interested',
+  new:            'New',
+  interested:     'Interested',
   not_interested: 'Not Interested',
-  callback:     'Callback',
+  callback:       'Callback',
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  new:         'text-[#555]',
-  interested:  'text-[#c9a84c]',
-  callback:    'text-blue-400',
+  new:        'text-[#555]',
+  interested: 'text-[#c9a84c]',
+  callback:   'text-blue-400',
 };
 
 function formatPhone(raw: string) {
@@ -126,9 +126,17 @@ function LeadCard({ lead, contractorId, onStatus }: {
   );
 }
 
-export default function LeadsView({ leads: initial, contractorId }: { leads: Lead[]; contractorId: string | null }) {
+export default function LeadsView({
+  leads: initial, contractorId, filter, page, perPage, counts,
+}: {
+  leads: Lead[];
+  contractorId: string | null;
+  filter: Filter;
+  page: number;
+  perPage: number;
+  counts: { new: number; callback: number; interested: number; all: number };
+}) {
   const [leads, setLeads] = useState(initial);
-  const [filter, setFilter] = useState<Filter>('new');
 
   function updateStatus(id: string, status: string) {
     setLeads(prev => prev.map(l => l.id === id
@@ -137,59 +145,86 @@ export default function LeadsView({ leads: initial, contractorId }: { leads: Lea
     ));
   }
 
-  const counts = useMemo(() => ({
-    new:       leads.filter(l => !l.call_status || l.call_status === 'new').length,
-    callback:  leads.filter(l => l.call_status === 'callback').length,
-    interested: leads.filter(l => l.call_status === 'interested').length,
-  }), [leads]);
+  // Build server URLs (tabs + pagination drive a fresh, paginated fetch).
+  function pageUrl(opts: { status?: Filter; page?: number }) {
+    const sp = new URLSearchParams();
+    if (contractorId) sp.set('c', contractorId);
+    sp.set('status', opts.status ?? filter);
+    const pg = opts.page ?? page;
+    if (pg > 1) sp.set('page', String(pg));
+    return `/leads?${sp.toString()}`;
+  }
+  const exportSp = new URLSearchParams();
+  if (contractorId) exportSp.set('c', contractorId);
+  exportSp.set('status', filter);
+  const exportUrl = `/api/leads/export?${exportSp.toString()}`;
 
-  const visible = useMemo(() => leads.filter(l => {
-    const s = l.call_status ?? 'new';
-    if (filter === 'new')        return s === 'new';
-    if (filter === 'callback')   return s === 'callback';
-    if (filter === 'interested') return s === 'interested';
-    return true;
-  }), [leads, filter]);
+  const total      = counts[filter];
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const startIdx   = total === 0 ? 0 : (page - 1) * perPage + 1;
+  const endIdx     = (page - 1) * perPage + leads.length;
 
   const tabs: { key: Filter; label: string; count: number }[] = [
-    { key: 'new',       label: 'New',        count: counts.new },
-    { key: 'callback',  label: 'Callbacks',  count: counts.callback },
-    { key: 'interested',label: 'Interested', count: counts.interested },
-    { key: 'all',       label: 'All',        count: leads.length },
+    { key: 'new',        label: 'New',        count: counts.new },
+    { key: 'callback',   label: 'Callbacks',  count: counts.callback },
+    { key: 'interested', label: 'Interested', count: counts.interested },
+    { key: 'all',        label: 'All',        count: counts.all },
   ];
 
   return (
     <main className="min-h-screen bg-[#050505] px-4 py-8 max-w-4xl mx-auto">
-      <div className="mb-8">
-        <p className="text-[#c9a84c] text-xs font-mono uppercase tracking-widest mb-1">ARIA Capital</p>
-        <h1 className="text-2xl text-[#f5f2ee]">Leads Pipeline</h1>
-        {contractorId
-          ? <p className="text-xs text-[#555] mt-1">Logged in as <span className="text-[#9a9a9a]">{contractorId}</span></p>
-          : <p className="text-xs text-red-400 mt-1">No contractor ID — add ?c=yourname to your URL</p>
-        }
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[#c9a84c] text-xs font-mono uppercase tracking-widest mb-1">ARIA Capital</p>
+          <h1 className="text-2xl text-[#f5f2ee]">Leads Pipeline</h1>
+          {contractorId
+            ? <p className="text-xs text-[#555] mt-1">Logged in as <span className="text-[#9a9a9a]">{contractorId}</span></p>
+            : <p className="text-xs text-red-400 mt-1">No contractor ID — add ?c=yourname to your URL</p>
+          }
+        </div>
+        <a href={exportUrl}
+          className="shrink-0 text-xs border border-[#c9a84c]/40 text-[#c9a84c] px-3 py-2 hover:bg-[#c9a84c]/10 transition-colors font-mono uppercase tracking-widest">
+          ⬇ Export CSV
+        </a>
       </div>
 
-      {/* Filter tabs */}
+      {/* Filter tabs — each is a server-side navigation to page 1 of that filter */}
       <div className="flex gap-1 mb-6 border-b border-[#1a1a1a]">
         {tabs.map(t => (
-          <button key={t.key} onClick={() => setFilter(t.key)}
+          <a key={t.key} href={pageUrl({ status: t.key, page: 1 })}
             className={`px-4 py-2 text-xs font-mono uppercase tracking-widest transition-colors border-b-2 -mb-px ${
               filter === t.key
                 ? 'border-[#c9a84c] text-[#c9a84c]'
                 : 'border-transparent text-[#555] hover:text-[#9a9a9a]'
             }`}>
             {t.label} {t.count > 0 && <span className="ml-1">({t.count})</span>}
-          </button>
+          </a>
         ))}
       </div>
 
-      {visible.length === 0 ? (
+      {leads.length === 0 ? (
         <p className="text-[#555] text-sm text-center py-16">No leads in this category.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {visible.map(l => (
+          {leads.map(l => (
             <LeadCard key={l.id} lead={l} contractorId={contractorId} onStatus={updateStatus} />
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {total > perPage && (
+        <div className="flex items-center justify-between mt-8 text-xs font-mono text-[#555]">
+          <span>{startIdx}–{endIdx} of {total}</span>
+          <div className="flex items-center gap-3">
+            {page > 1
+              ? <a href={pageUrl({ page: page - 1 })} className="text-[#c9a84c] hover:text-[#e0c070]">← Prev</a>
+              : <span className="opacity-30">← Prev</span>}
+            <span>Page {page} of {totalPages}</span>
+            {page < totalPages
+              ? <a href={pageUrl({ page: page + 1 })} className="text-[#c9a84c] hover:text-[#e0c070]">Next →</a>
+              : <span className="opacity-30">Next →</span>}
+          </div>
         </div>
       )}
     </main>
