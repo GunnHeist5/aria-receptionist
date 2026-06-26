@@ -10,7 +10,13 @@ const { analyzeForOffboarding } = require('../agents/offboard-proposer');
 const { runScriptLoop }         = require('../agents/script-iterator');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazy init — constructing the SDK throws without OPENAI_API_KEY, so defer it
+// past import time (`next build` loads this module without secrets).
+let _openai = null;
+function getOpenai() {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+}
 
 // ---------------------------------------------------------------------------
 // SCREENING — runs every 5 min
@@ -40,7 +46,7 @@ async function runScreening() {
             const arrayBuf = await audioRes.arrayBuffer();
             const ext      = fetchUrl.toLowerCase().match(/\.(mp3|m4a|wav|ogg|webm)/)?.[1] ?? 'mp3';
             const file     = new File([arrayBuf], `submission.${ext}`, { type: `audio/${ext}` });
-            const result   = await openai.audio.transcriptions.create({ file, model: 'whisper-1' });
+            const result   = await getOpenai().audio.transcriptions.create({ file, model: 'whisper-1' });
             transcript     = result.text;
           } catch (e) {
             transcript = `[Transcription failed for ${candidate.submission_url}: ${e.message}. Manual review required.]`;

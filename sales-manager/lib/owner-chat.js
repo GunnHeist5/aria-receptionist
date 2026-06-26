@@ -1,7 +1,13 @@
 'use strict';
 const Anthropic = require('@anthropic-ai/sdk');
 
-const client     = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Lazy init — constructing the SDK throws when ANTHROPIC_API_KEY is absent, so
+// defer it past import time (`next build` loads this module without secrets).
+let _client = null;
+function getClient() {
+  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return _client;
+}
 const MAX_HIST   = 20;
 // In-memory history — persists for the life of the aria-web process
 const history    = [];
@@ -56,7 +62,7 @@ You can discuss strategy, rep performance, script ideas, pricing, candidate eval
 
   history.push({ role: 'user', content: userMessage });
 
-  const response = await client.messages.create({
+  const response = await getClient().messages.create({
     model:      'claude-haiku-4-5-20251001',
     max_tokens: 1024,
     system:     systemPrompt,
