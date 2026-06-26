@@ -1,12 +1,19 @@
 'use strict';
 const Anthropic = require('@anthropic-ai/sdk');
 
-if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Lazy init — must not throw at import time (e.g. during `next build`); the key
+// is only required the first time Claude is actually called at runtime.
+let _anthropic = null;
+function getAnthropic() {
+  if (!_anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  }
+  return _anthropic;
+}
 
 async function callClaude({ systemPrompt, userPrompt, model = 'claude-haiku-4-5-20251001', maxTokens = 2048 }) {
-  const msg = await anthropic.messages.create({
+  const msg = await getAnthropic().messages.create({
     model,
     max_tokens: maxTokens,
     system: systemPrompt,

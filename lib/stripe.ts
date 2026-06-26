@@ -1,11 +1,29 @@
 import Stripe from 'stripe';
 import type { Pool } from 'pg';
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set');
+let _stripe: Stripe | null = null;
+
+function getStripe(): Stripe {
+  if (!_stripe) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not set');
+    }
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return _stripe;
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Lazily-initialized Stripe client. Importing this module must NOT throw when
+// STRIPE_SECRET_KEY is absent (e.g. during `next build`, which loads every
+// route module) — the key is only required the first time the client is used
+// at runtime. The proxy defers construction to first property access.
+export const stripe: Stripe = new Proxy({} as Stripe, {
+  get(_target, prop) {
+    const client = getStripe() as unknown as Record<string | symbol, unknown>;
+    const value = client[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Configurable pricing — change via env, never hardcode per-client
