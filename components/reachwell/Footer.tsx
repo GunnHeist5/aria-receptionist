@@ -54,8 +54,8 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto mt-14 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#141414] pt-8">
         <p className="text-xs text-[#555]">© 2026 Reachwell. All rights reserved.</p>
         <div className="flex gap-6 text-xs text-[#6b6b6b]">
-          <a href="#" className="hover:text-[#c9a84c] transition-colors">Privacy</a>
-          <a href="#" className="hover:text-[#c9a84c] transition-colors">Terms</a>
+          <a href="/privacy" className="hover:text-[#c9a84c] transition-colors">Privacy</a>
+          <a href="/terms" className="hover:text-[#c9a84c] transition-colors">Terms</a>
           <a href="mailto:sales@reachwellhq.com" className="hover:text-[#c9a84c] transition-colors">sales@reachwellhq.com</a>
         </div>
       </div>
