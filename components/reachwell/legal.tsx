@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Logo } from './Logo';
+import { Logo } from './Logo';
 
 export type Block = string | { list: string[] };
 export type LegalSection = { heading: string; body: Block[] };

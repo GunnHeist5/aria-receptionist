@@ -2,6 +2,8 @@
 
 import { Logo } from './Logo';
 
+import { Logo } from './Logo';
+
 const cols = [
   {
     heading: 'Product',
@@ -18,6 +20,7 @@ const cols = [
       { label: 'Get started', href: '/intake' },
       { label: 'Book a demo', href: 'mailto:sales@reachwellhq.com' },
       { label: 'Become a rep', href: '/apply' },
+      { label: 'LinkedIn', href: 'https://www.linkedin.com/company/reachwell1', external: true },
       { label: 'Contact', href: 'mailto:sales@reachwellhq.com' },
     ],
   },
@@ -42,7 +45,11 @@ export default function Footer() {
             <ul className="mt-4 space-y-3">
               {col.links.map((l) => (
                 <li key={l.label}>
-                  <a href={l.href} className="text-sm text-[#9a9a9a] hover:text-[#c9a84c] transition-colors">
+                  <a
+                    href={l.href}
+                    {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                    className="text-sm text-[#9a9a9a] hover:text-[#c9a84c] transition-colors"
+                  >
                     {l.label}
                   </a>
                 </li>

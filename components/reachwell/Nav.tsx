@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CTAButton } from './primitives';
 import { Logo } from './Logo';
+import { Logo } from './Logo';
 
 const links = [
   { label: 'How it works', href: '#how-it-works' },
