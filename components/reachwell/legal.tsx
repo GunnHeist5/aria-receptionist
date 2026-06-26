@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Logo } from './Logo';
 
 export type Block = string | { list: string[] };
 export type LegalSection = { heading: string; body: Block[] };
@@ -38,9 +39,8 @@ export function LegalDoc({
     <main className="relative min-h-screen bg-[#050505] text-[#f5f2ee]">
       <header className="border-b border-[#141414]">
         <div className="max-w-3xl mx-auto flex items-center justify-between px-5 sm:px-8 h-16">
-          <a href="/" className="flex items-center gap-2.5">
-            <span className="grid place-items-center w-8 h-8 rounded-lg bg-[#c9a84c] text-[#050505] text-sm font-bold">R</span>
-            <span className="font-semibold tracking-tight text-lg">Reachwell</span>
+          <a href="/">
+            <Logo size={32} wordClassName="font-semibold tracking-tight text-lg" />
           </a>
           <a href="/" className="text-sm text-[#9a9a9a] hover:text-[#f5f2ee] transition-colors">&larr; Back to site</a>
         </div>

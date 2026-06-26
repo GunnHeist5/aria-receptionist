@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CTAButton } from './primitives';
+import { Logo } from './Logo';
 
 const links = [
   { label: 'How it works', href: '#how-it-works' },
@@ -32,9 +33,8 @@ export default function Nav() {
       }`}
     >
       <nav className="max-w-7xl mx-auto flex items-center justify-between px-5 sm:px-8 h-16">
-        <a href="#top" className="flex items-center gap-2.5 group">
-          <span className="grid place-items-center w-8 h-8 rounded-lg bg-[#c9a84c] text-[#050505] text-sm font-bold">R</span>
-          <span className="text-[#f5f2ee] font-semibold tracking-tight text-lg">Reachwell</span>
+        <a href="#top" className="group">
+          <Logo size={32} />
         </a>
 
         <div className="hidden md:flex items-center gap-8">

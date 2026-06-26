@@ -1,5 +1,7 @@
 'use client';
 
+import { Logo } from './Logo';
+
 const cols = [
   {
     heading: 'Product',
@@ -26,9 +28,8 @@ export default function Footer() {
     <footer className="border-t border-[#141414] bg-[#070707] px-5 sm:px-8 pt-16 pb-10">
       <div className="max-w-7xl mx-auto grid gap-12 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
         <div>
-          <a href="#top" className="flex items-center gap-2.5">
-            <span className="grid place-items-center w-8 h-8 rounded-lg bg-[#c9a84c] text-[#050505] text-sm font-bold">R</span>
-            <span className="text-[#f5f2ee] font-semibold text-lg">Reachwell</span>
+          <a href="#top">
+            <Logo size={32} wordClassName="text-[#f5f2ee] font-semibold text-lg" />
           </a>
           <p className="mt-4 max-w-xs text-sm text-[#6b6b6b] leading-relaxed">
             The AI receptionist for local service businesses. Never miss another call.
