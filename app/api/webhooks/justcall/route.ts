@@ -7,6 +7,13 @@ const { extractCallData } = require('../../../../sales-manager/agents/call-extra
 
 export const dynamic = 'force-dynamic';
 
+// JustCall (and most webhook providers) ping the URL with a GET to verify it's
+// reachable before saving. Return 200 so the "Webhook URL is not accessible"
+// check passes. Real events arrive as POST below.
+export async function GET() {
+  return NextResponse.json({ ok: true, endpoint: 'justcall-webhook' });
+}
+
 /**
  * JustCall "Call AI report generated" webhook → extract structured data → write
  * to call_outcomes (same table the manual /call survey uses, so /insights keeps
