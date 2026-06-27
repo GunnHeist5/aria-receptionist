@@ -136,10 +136,26 @@ async function main() {
   // Connect to DB
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+  // Cost-saving dedup column (idempotent) + which of these places we already have.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS place_id VARCHAR(255)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_place_id ON clients(place_id) WHERE place_id IS NOT NULL`);
+  let known = new Set();
+  if (placeIds.length) {
+    const { rows } = await pool.query('SELECT place_id FROM clients WHERE place_id = ANY($1)', [placeIds]);
+    known = new Set(rows.map(r => r.place_id));
+  }
+
   let inserted = 0;
   let skipped  = 0;
 
   for (let i = 0; i < placeIds.length; i++) {
+    // Cost saver: skip the paid Details call for places we've already scraped.
+    if (known.has(placeIds[i])) {
+      console.log(`  [${i + 1}] SKIP  — place already in DB`);
+      skipped++;
+      continue;
+    }
+
     await sleep(200); // Rate limit: 5 req/s
     const detailRes = await placeDetails(placeIds[i]);
 
@@ -155,7 +171,7 @@ async function main() {
     const site  = d.website ?? null;
     const { city, state, zip } = parseAddress(d.address_components);
 
-    // Skip if phone already exists in DB
+    // Fallback dedup by phone (catches leads added from other sources w/o place_id)
     if (phone) {
       const exists = await pool.query('SELECT id FROM clients WHERE phone = $1', [phone]);
       if (exists.rows.length) {
@@ -168,9 +184,9 @@ async function main() {
     // Insert as lead
     try {
       await pool.query(
-        `INSERT INTO clients (business_name, phone, city, state, zip, website, status, billing_status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'lead', 'none', NOW(), NOW())`,
-        [name, phone, city, state, zip, site]
+        `INSERT INTO clients (business_name, phone, city, state, zip, website, place_id, status, billing_status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'lead', 'none', NOW(), NOW())`,
+        [name, phone, city, state, zip, site, placeIds[i]]
       );
       console.log(`  [${i + 1}] ADD   ${name} — ${phone ?? 'no phone'} (${city ?? '?'}, ${state ?? '?'})`);
       inserted++;

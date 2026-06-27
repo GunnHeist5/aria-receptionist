@@ -1,5 +1,20 @@
 [
-  { "key": "plumber",     "query": "plumber plumbing" },
-  { "key": "hvac",        "query": "HVAC heating air conditioning" },
-  { "key": "electrician", "query": "electrician electrical contractor" }
+  { "key": "plumber",        "query": "plumber plumbing" },
+  { "key": "hvac",           "query": "HVAC heating air conditioning" },
+  { "key": "electrician",    "query": "electrician electrical contractor" },
+  { "key": "roofer",         "query": "roofing contractor roofer" },
+  { "key": "landscaper",     "query": "landscaping lawn care service" },
+  { "key": "pest_control",   "query": "pest control exterminator" },
+  { "key": "garage_door",    "query": "garage door repair installation" },
+  { "key": "locksmith",      "query": "locksmith" },
+  { "key": "auto_repair",    "query": "auto repair shop mechanic" },
+  { "key": "appliance",      "query": "appliance repair service" },
+  { "key": "flooring",       "query": "flooring contractor installation" },
+  { "key": "painter",        "query": "painting contractor painter" },
+  { "key": "cleaning",       "query": "house cleaning maid service" },
+  { "key": "towing",         "query": "towing service" },
+  { "key": "dentist",        "query": "dentist dental office" },
+  { "key": "chiropractor",   "query": "chiropractor" },
+  { "key": "med_spa",        "query": "med spa medical spa" },
+  { "key": "law_firm",       "query": "law firm attorney" }
 ]

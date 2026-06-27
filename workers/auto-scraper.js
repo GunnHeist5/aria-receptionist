@@ -98,7 +98,17 @@ async function scrapeJob(pool, target, queryDef) {
   let inserted = 0;
   let skipped  = 0;
 
-  for (const placeId of placeIds) {
+  // Cost saver: drop place_ids we've already scraped BEFORE paying for Details.
+  // Re-scrapes mostly return businesses we already have; this skips that call.
+  let fresh = placeIds;
+  if (placeIds.length) {
+    const { rows } = await pool.query('SELECT place_id FROM clients WHERE place_id = ANY($1)', [placeIds]);
+    const known = new Set(rows.map(r => r.place_id));
+    skipped += known.size;
+    fresh = placeIds.filter(id => !known.has(id));
+  }
+
+  for (const placeId of fresh) {
     await sleep(200);
     const dr = await placeDetails(placeId);
     if (dr.status !== 'OK') { skipped++; continue; }
@@ -107,7 +117,7 @@ async function scrapeJob(pool, target, queryDef) {
     const phone = d.formatted_phone_number?.replace(/\D/g, '') ?? null;
     const addr  = parseAddress(d.address_components ?? []);
 
-    // Skip if phone already in DB
+    // Fallback dedup by phone (catches leads added from other sources w/o place_id)
     if (phone) {
       const { rows } = await pool.query('SELECT id FROM clients WHERE phone = $1', [phone]);
       if (rows.length) { skipped++; continue; }
@@ -116,9 +126,9 @@ async function scrapeJob(pool, target, queryDef) {
     try {
       await pool.query(
         `INSERT INTO clients
-           (business_name, phone, city, state, zip, website, status, billing_status, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,'lead','none',NOW(),NOW())`,
-        [d.name, phone, addr.city ?? name, addr.state ?? state, addr.zip, d.website ?? null]
+           (business_name, phone, city, state, zip, website, place_id, status, billing_status, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'lead','none',NOW(),NOW())`,
+        [d.name, phone, addr.city ?? name, addr.state ?? state, addr.zip, d.website ?? null, placeId]
       );
       inserted++;
     } catch { skipped++; }
@@ -130,6 +140,11 @@ async function scrapeJob(pool, target, queryDef) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  // Cost-saving dedup column (idempotent). place_id lets us skip the paid Details
+  // call for businesses already scraped on a previous pass.
+  await pool.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS place_id VARCHAR(255)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_place_id ON clients(place_id) WHERE place_id IS NOT NULL`);
 
   // Create progress table if missing
   await pool.query(`
