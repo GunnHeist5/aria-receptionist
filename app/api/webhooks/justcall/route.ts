@@ -57,6 +57,19 @@ function ensureSchema(pool: any): Promise<void> {
   return schemaReady;
 }
 
+// Same memoization for the opt-out column (ALTER takes an exclusive lock —
+// never run it per-request on a hot webhook path).
+let optOutReady: Promise<void> | null = null;
+function ensureOptOutColumn(pool: any): Promise<void> {
+  if (!optOutReady) {
+    optOutReady = pool
+      .query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS do_not_contact BOOLEAN DEFAULT false`)
+      .then(() => undefined)
+      .catch((e: unknown) => { optOutReady = null; throw e; });
+  }
+  return optOutReady;
+}
+
 // --- route -----------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
@@ -79,7 +92,47 @@ export async function POST(req: NextRequest) {
   const isAiReport = /ai|report|transcri|summary/.test(type) || hasTranscript;
   const isCallComplete = /call.?completed|completed|call.?ended|hangup|disposition/.test(type);
 
-  // WHITELIST — only the two events above do anything. Every other now-enabled
+  // Inbound SMS: the ONLY thing we act on is a STOP reply (opt-out for the
+  // follow-up loop). (UNVERIFIED field paths — flagged like the rest.)
+  const isSms = /sms|text|message/.test(type) && !isAiReport;
+  if (isSms) {
+    const smsBody = String(
+      payload?.sms_info?.body ?? body?.sms_info?.body ??
+      payload?.body ?? body?.body ?? payload?.sms_body ?? body?.sms_body ?? ''
+    ).trim().toUpperCase();
+    const direction = String(payload?.direction ?? body?.direction ?? '').toLowerCase();
+    // ^in matches incoming/inbound but NOT "outgoing" (which contains "in").
+    // Unknown direction → treat as inbound; safe because we only act on STOP.
+    const isInbound = !direction || /^in/.test(direction);
+    if (isInbound && /^(STOP|STOPALL|UNSUBSCRIBE|CANCEL|QUIT|END)\b/.test(smsBody)) {
+      const from = String(
+        payload?.contact_number ?? body?.contact_number ??
+        payload?.from ?? body?.from ?? payload?.client_number ?? body?.client_number ?? ''
+      ).replace(/\D/g, '').slice(-10);
+      if (from.length === 10) {
+        try {
+          const pool = getPool();
+          await ensureOptOutColumn(pool);
+          // Leads only: paying customers never get follow-up texts, and their
+          // rows must not be mutated from an unverified webhook branch.
+          const { rowCount } = await pool.query(
+            `UPDATE clients SET do_not_contact = true
+             WHERE status = 'lead'
+               AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1`,
+            [from]
+          );
+          return NextResponse.json({ ok: true, type: 'sms-stop', optedOut: rowCount });
+        } catch (err: unknown) {
+          // An opt-out MUST NOT vanish silently — log loudly for follow-up.
+          console.error('[justcall webhook] STOP opt-out FAILED for', from, '-', err instanceof Error ? err.message : err);
+          return NextResponse.json({ ok: false, type: 'sms-stop', error: 'opt-out failed' });
+        }
+      }
+    }
+    return NextResponse.json({ ok: true, ignored: 'sms' });
+  }
+
+  // WHITELIST — only the events above do anything. Every other now-enabled
   // event is acked (200) so JustCall doesn't retry, and we never act on data we
   // don't understand. This is also what stops a non-AI event from triggering a
   // phantom transcript fetch.

@@ -8,6 +8,8 @@ const { screenCandidate }  = require('../agents/screener');
 const { coachRep }         = require('../agents/coach');
 const { analyzeForOffboarding } = require('../agents/offboard-proposer');
 const { runScriptLoop }         = require('../agents/script-iterator');
+const { runFollowupSms }        = require('./followup-sms');
+const { sweepDemoLine }         = require('../../onboarding/src/demo-line');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 // Lazy init — constructing the SDK throws without OPENAI_API_KEY, so defer it
@@ -511,6 +513,21 @@ module.exports = { executeOffboarding };
 // ---------------------------------------------------------------------------
 let lastCoachingRun = null;
 let lastOffboardRun = null;
+let lastFollowupSmsRun = null;
+
+// Demo-line auto-reset needs the real provider; skip entirely in mock mode.
+function getVoiceProvider() {
+  if ((process.env.VOICE_PROVIDER || 'mock').toLowerCase().trim() !== 'trillet') return null;
+  const { TrilletVoiceProvider } = require('../../voice-provider/src/trillet.provider');
+  return new TrilletVoiceProvider();
+}
+
+async function runDemoLineSweep() {
+  const provider = getVoiceProvider();
+  if (!provider) return;
+  const reset = await sweepDemoLine(pool, provider);
+  if (reset) console.log('[demo-line] auto-reset to default identity');
+}
 
 async function tick() {
   const now = new Date();
@@ -521,6 +538,17 @@ async function tick() {
   await runMonitoring().catch(e => console.error('[tick:monitoring]', e.message));
   await runOnboarding().catch(e => console.error('[tick:onboarding]', e.message));
   await runScriptLoopIfDue().catch(e => console.error('[tick:script-loop]', e.message));
+  await runDemoLineSweep().catch(e => console.error('[tick:demo-line]', e.message));
+
+  // No-answer follow-up SMS: once a day at FOLLOWUP_SMS_HOUR_UTC (default 16
+  // UTC ≈ late morning US). Dry-runs (logs only) until FOLLOWUP_SMS_ENABLED=true.
+  const smsHour = parseInt(process.env.FOLLOWUP_SMS_HOUR_UTC || '16', 10);
+  if (hourUTC === smsHour && lastFollowupSmsRun !== now.toDateString()) {
+    lastFollowupSmsRun = now.toDateString();
+    await runFollowupSms(pool)
+      .then(r => console.log('[followup-sms]', JSON.stringify(r)))
+      .catch(e => console.error('[tick:followup-sms]', e.message));
+  }
 
   if (hourUTC === flags.COACHING_HOUR_UTC && lastCoachingRun !== now.toDateString()) {
     lastCoachingRun = now.toDateString();
@@ -530,6 +558,19 @@ async function tick() {
   }
 }
 
-console.log('[aria-sales] Sales manager worker starting…');
-tick();
-setInterval(tick, 5 * 60 * 1000); // every 5 minutes
+// Only run the scheduler when this file IS the process entry (PM2 aria-sales,
+// fork mode). The Telegram webhook route requires this module for
+// executeOffboarding, which previously started a SECOND full scheduler inside
+// the Next.js server — double screening/coaching, and (new) duplicate SMS.
+// The pm_exec_path check keeps the scheduler alive if PM2 is ever switched to
+// cluster mode (where PM2's wrapper, not this file, is require.main).
+const isWorkerEntry =
+  require.main === module ||
+  (process.env.pm_exec_path || '').replace(/\\/g, '/').includes('sales-manager/workers/index.js');
+if (isWorkerEntry) {
+  console.log('[aria-sales] Sales manager worker starting…');
+  tick();
+  setInterval(tick, 5 * 60 * 1000); // every 5 minutes
+} else {
+  console.log('[aria-sales] loaded as a library (no scheduler) — entry:', require.main?.filename ?? 'unknown');
+}

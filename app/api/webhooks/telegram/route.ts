@@ -346,8 +346,12 @@ export async function POST(req: NextRequest) {
     const isOwner = chatId === OWNER_ID;
 
     // ── Intercept active call session note step ────────────────────────
+    // A slash-command while a note is pending means the rep abandoned the
+    // note — clear the session and let the command run instead of eating it.
     const activeSession = cs.get(chatId);
-    if (activeSession?.step === 'note') {
+    if (activeSession?.step === 'note' && text.startsWith('/')) {
+      cs.clear(chatId);
+    } else if (activeSession?.step === 'note') {
       let contractorId: string | null = null;
       if (!isOwner) {
         const { rows: [rep] } = await pool.query(`SELECT id FROM contractors WHERE channel_id=$1 AND active=true LIMIT 1`, [chatId]);
@@ -396,6 +400,7 @@ export async function POST(req: NextRequest) {
       const helpText = isOwner
         ? `<b>Owner commands</b>\n\n` +
           `<code>/call</code> — log a call outcome (3 taps)\n` +
+          `<code>/demo [phone or name]</code> — make the demo line answer as a prospect's business\n` +
           `<code>/insights</code> — objection breakdown + demo close rates\n` +
           `<code>/reps</code> — active rep health status\n` +
           `<code>/candidates</code> — candidate pipeline\n` +
@@ -408,6 +413,7 @@ export async function POST(req: NextRequest) {
           `Or just ask me anything about the business.`
         : `<b>Your commands</b>\n\n` +
           `<code>/call</code> — log a connect (3 taps, ~15 sec)\n` +
+          `<code>/demo [phone or name]</code> — demo line answers as THEIR business; have them call it\n` +
           `<code>/log 80 12 3</code> — end-of-day totals (dials/connects/demos)\n` +
           `<code>/stats</code> — your 7-day numbers + unpaid commissions\n` +
           `<code>/objection [what they said]</code> — log an objection\n` +
@@ -434,6 +440,82 @@ export async function POST(req: NextRequest) {
       }
       const report = await buildInsights(pool, contractorId, isOwner);
       await tg.send(chatId, report);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── /demo — owner and ACTIVE reps only ─────────────────────────────
+    // Re-skins the shared demo line to answer as a lead's business, so a
+    // prospect can call and hear THEIR OWN receptionist. Auto-resets later.
+    // Gated: it mutates provider state and surfaces lead contact info, and
+    // Telegram bots are publicly messageable — never expose it to strangers.
+    if (text.startsWith('/demo')) {
+      if (!isOwner) {
+        const { rows: [rep] } = await pool.query(
+          `SELECT id FROM contractors WHERE channel_id=$1 AND active=true LIMIT 1`, [chatId]);
+        if (!rep) return NextResponse.json({ ok: true }); // unknown chat: silently ignore
+      }
+
+      const arg = text.replace(/^\/demo\s*/i, '').trim();
+      try {
+        // Load pipeline modules directly (same reason as finalizeClientNumber:
+        // avoid the dotenv-loading index.js wrappers inside the Next.js runtime).
+        // Constructed INSIDE the try — the Trillet constructor throws if env is
+        // missing, and that must become a chat reply, not a 500 Telegram retries.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const demoLine = require('../../../../onboarding/src/demo-line');
+        const impl = (process.env.VOICE_PROVIDER || 'mock').toLowerCase().trim();
+        const provider = impl === 'trillet'
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          ? new (require('../../../../voice-provider/src/trillet.provider').TrilletVoiceProvider)()
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          : new (require('../../../../voice-provider/src/mock.provider').MockVoiceProvider)();
+        if (!arg) {
+          await tg.send(chatId,
+            `<b>Demo line</b> — make it answer as a prospect's business:\n` +
+            `<code>/demo 9075630196</code> (their phone)\n` +
+            `<code>/demo Cool Air Mechanical</code> (their name)\n` +
+            `<code>/demo reset</code> — back to default\n\n` +
+            `Then tell them: "Call <code>${demoLine.DEMO_NUMBER}</code> — that's YOUR receptionist answering."`);
+          return NextResponse.json({ ok: true });
+        }
+
+        if (arg.toLowerCase() === 'reset') {
+          const r = await demoLine.resetDemoLine(pool, provider);
+          await tg.send(chatId, `✅ Demo line reset to <b>${r.businessName}</b>.`);
+          return NextResponse.json({ ok: true });
+        }
+
+        // Find the lead: by phone if the arg looks like one, else by name.
+        const asNumber = normNumber(arg);
+        const { rows: matches } = asNumber
+          ? await pool.query(
+              `SELECT id, business_name, phone, city, state, website, business_type
+               FROM clients WHERE right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1 LIMIT 3`,
+              [asNumber.replace(/\D/g, '').slice(-10)])
+          : await pool.query(
+              `SELECT id, business_name, phone, city, state, website, business_type
+               FROM clients WHERE business_name ILIKE $1 ORDER BY (status='lead') DESC LIMIT 3`,
+              [`%${arg}%`]);
+
+        if (!matches.length) {
+          await tg.send(chatId, `No lead found matching "<b>${arg}</b>". Try their phone number or a longer name fragment.`);
+          return NextResponse.json({ ok: true });
+        }
+        if (matches.length > 1) {
+          const lines = matches.map((m: any) => `• <b>${m.business_name}</b> (${m.city ?? '?'}, ${m.state ?? '?'}) — <code>/demo ${m.phone}</code>`).join('\n');
+          await tg.send(chatId, `Found several — pick one:\n${lines}`);
+          return NextResponse.json({ ok: true });
+        }
+
+        const r = await demoLine.applyDemoPack(pool, matches[0], provider);
+        await tg.send(chatId,
+          `✅ Demo line is now answering as <b>${r.businessName}</b>.\n\n` +
+          `Tell the prospect (tap to copy):\n` +
+          `<code>Call ${r.number} — that's YOUR receptionist answering for ${r.businessName}.</code>\n\n` +
+          `Auto-resets in ~${r.resetMinutes} min. One prospect at a time — a new /demo replaces it.`);
+      } catch (err: unknown) {
+        await tg.send(chatId, `Demo line failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
       return NextResponse.json({ ok: true });
     }
 
