@@ -9,6 +9,7 @@ const { coachRep }         = require('../agents/coach');
 const { analyzeForOffboarding } = require('../agents/offboard-proposer');
 const { runScriptLoop }         = require('../agents/script-iterator');
 const { runFollowupSms }        = require('./followup-sms');
+const { runJustcallSync }       = require('./justcall-sync');
 const { sweepDemoLine }         = require('../../onboarding/src/demo-line');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -514,6 +515,7 @@ module.exports = { executeOffboarding };
 let lastCoachingRun = null;
 let lastOffboardRun = null;
 let lastFollowupSmsRun = null;
+let lastJustcallSyncHour = null;
 
 // Demo-line auto-reset needs the real provider; skip entirely in mock mode.
 function getVoiceProvider() {
@@ -539,6 +541,16 @@ async function tick() {
   await runOnboarding().catch(e => console.error('[tick:onboarding]', e.message));
   await runScriptLoopIfDue().catch(e => console.error('[tick:script-loop]', e.message));
   await runDemoLineSweep().catch(e => console.error('[tick:demo-line]', e.message));
+
+  // JustCall call-log sync — hourly. Requires JUSTCALL_API_KEY/SECRET; skips
+  // quietly when unset (e.g. local dev).
+  const syncKey = `${now.toDateString()}-${hourUTC}`;
+  if (process.env.JUSTCALL_API_KEY && lastJustcallSyncHour !== syncKey) {
+    lastJustcallSyncHour = syncKey;
+    await runJustcallSync(pool)
+      .then(r => console.log('[justcall-sync]', JSON.stringify(r.calls), 'agents:', JSON.stringify(r.agents.unmatched)))
+      .catch(e => console.error('[tick:justcall-sync]', e.message));
+  }
 
   // No-answer follow-up SMS: once a day at FOLLOWUP_SMS_HOUR_UTC (default 16
   // UTC ≈ late morning US). Dry-runs (logs only) until FOLLOWUP_SMS_ENABLED=true.
