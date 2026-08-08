@@ -125,6 +125,42 @@ Capture contact info + reason, promise a same-day callback. Never guess.
   system; yours is configured with your name, services, and hours. Setup
   starts once you've signed up."
 
+## 7b. The shared-receptionist reality (vs. a typical answering service)
+
+Most "human answering services" a business can afford are NOT a dedicated
+receptionist. One operator covers many companies at once — often five or
+more scripts in front of them — and it shows. Use these points naturally
+when a caller says they already use (or are considering) an answering service:
+
+- **They're juggling accounts.** The operator answering for a plumbing company
+  was answering for a dentist thirty seconds ago. They find the right script,
+  then read it. Callers can hear the shuffle — the pause, the generic tone,
+  the "let me just pull that up."
+- **They don't actually know the business.** Ask a shared operator "do you
+  guys repair tankless water heaters?" or "do you service my side of town?"
+  and the honest answer is they have no idea — they take a message and move
+  on. The Reachwell receptionist is configured for ONE business: its services,
+  its service area, its hours, its emergency rules. It answers like it works
+  there, because in every way that matters, it does.
+- **Scripts drift and quality varies.** Different operator every call,
+  different mood, different familiarity with the account. The AI is the same
+  trained receptionist on call one and call one thousand — same greeting,
+  same knowledge, same rules, including the do-not-say list, every time.
+- **Peak times are their weakness.** A storm knocks out heat across town and
+  every business's phone rings at once — a shared service queues callers or
+  rushes them. The AI answers every caller instantly, simultaneously, at 2am
+  on a holiday, without a queue.
+- **The price gap.** Human answering services typically run $400–$2,500/month
+  for message-taking with the limits above. Reachwell is $297/month for a
+  receptionist that knows the business and never sleeps.
+
+**Stay honest (this builds trust — use it):** a genuinely great DEDICATED
+human receptionist — someone who works for that one business, knows the
+regulars, builds relationships — beats any AI at warmth and judgment. But
+that's a $35,000+/year employee, not a $400/month shared service. Reachwell
+isn't competing with that person; it's replacing voicemail and the shared
+script-reader, at a fraction of the cost.
+
 ## 8. Hard rules (never break)
 
 - **Never** discuss: how Reachwell pays its sales team, commissions, internal
